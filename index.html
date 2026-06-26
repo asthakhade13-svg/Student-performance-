@@ -32,10 +32,11 @@
         <button class="nav-btn active" data-tab="predict" id="nav-predict">🔮 Predict</button>
         <button class="nav-btn" data-tab="dataset" id="nav-dataset">📊 Dataset</button>
         <button class="nav-btn" data-tab="insights" id="nav-insights">📈 Insights</button>
+        <button class="nav-btn" data-tab="mlops" id="nav-mlops">🛠 MLOps</button>
       </nav>
       <div class="model-badge">
         <span class="badge-dot"></span>
-        <span>Model Live</span>
+        <span id="header-model-ver">Model: Loading...</span>
       </div>
     </div>
   </header>
@@ -327,6 +328,111 @@
       </div>
     </section>
 
+    <!-- ════════════════════════════════════════
+         TAB: MLOPS PORTAL
+    ════════════════════════════════════════ -->
+    <section class="tab-content" id="tab-mlops">
+      <div class="hero">
+        <h1 class="hero-title">Model <span class="gradient-text">Registry & MLOps</span></h1>
+        <p class="hero-sub">Monitor model versions, track evaluation metrics, and manage model lifecycle status</p>
+      </div>
+
+      <div class="mlops-grid">
+        
+        <!-- Active Model Stats Card -->
+        <div class="card active-model-card">
+          <div class="card-header">
+            <h2>🛠 Active Production Model</h2>
+            <p>Currently serving inference requests</p>
+          </div>
+          <div class="active-model-details">
+            <div class="detail-row">
+              <span class="detail-label">Active Version:</span>
+              <span class="detail-val highlight" id="mlops-active-ver">—</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Training R² Score:</span>
+              <span class="detail-val" id="mlops-active-r2">—</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Training MAE:</span>
+              <span class="detail-val" id="mlops-active-mae">—</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Dataset Sample Size:</span>
+              <span class="detail-val" id="mlops-active-size">—</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Created At:</span>
+              <span class="detail-val" id="mlops-active-date">—</span>
+            </div>
+          </div>
+          
+          <button class="predict-btn mlops-btn" onclick="triggerManualRetrain()">
+            <span>↻ Force Pipeline Retraining</span>
+          </button>
+        </div>
+
+        <!-- Validation Rules Panel -->
+        <div class="card validation-card">
+          <div class="card-header">
+            <h2>🛡 Data Integrity & Validation Schema</h2>
+            <p>Active bounds checking before training/predicting</p>
+          </div>
+          <div class="validation-rules">
+            <div class="rule-item">
+              <span class="rule-name">study_hours</span>
+              <span class="rule-range">0.0 – 12.0 hours/day</span>
+            </div>
+            <div class="rule-item">
+              <span class="rule-name">attendance</span>
+              <span class="rule-range">0.0% – 100.0%</span>
+            </div>
+            <div class="rule-item">
+              <span class="rule-name">previous_marks</span>
+              <span class="rule-range">0.0 – 100.0</span>
+            </div>
+            <div class="rule-item">
+              <span class="rule-name">assignments_completed</span>
+              <span class="rule-range">0 – 10</span>
+            </div>
+            <div class="rule-item">
+              <span class="rule-name">final_score (Actuals)</span>
+              <span class="rule-range">0.0 – 100.0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Registry History Table -->
+        <div class="card registry-table-card">
+          <div class="table-header">
+            <div>
+              <h2>📋 Registry Checkpoint Logs</h2>
+              <p class="record-count" id="mlops-runs-count">0 model versions registered</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Version</th>
+                  <th>Created Date</th>
+                  <th>Dataset Size</th>
+                  <th>R² Score</th>
+                  <th>MAE</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="mlops-history-body">
+                <tr><td colspan="7" class="loading-row">Loading run logs…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </section>
   </main>
 
   <!-- ── TOAST ──────────────────────────────── -->

@@ -18,6 +18,7 @@ function switchTab(tab) {
   document.getElementById(`tab-${tab}`).classList.add('active');
   if (tab === 'dataset')  loadDataset();
   if (tab === 'insights') loadInsights();
+  if (tab === 'mlops')    loadMLOps();
 }
 
 // ── SLIDER LIVE LABELS ────────────────────────────────
@@ -296,16 +297,140 @@ function injectRingGradient() {
   const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
   defs.innerHTML = `
     <linearGradient id="ring-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%"   stop-color="#7c6aff"/>
-      <stop offset="100%" stop-color="#22d3ee"/>
+      <stop offset="0%"   stop-color="#5a8a00"/>
+      <stop offset="100%" stop-color="#c97a00"/>
     </linearGradient>
   `;
   svg.insertBefore(defs, svg.firstChild);
+}
+
+// ── MLOPS SYSTEM INTEGRATION ──────────────────────────
+async function fetchActiveModelVersion() {
+  try {
+    const res = await fetch('/api/mlops/history');
+    const data = await res.json();
+    if (data.success && data.active_version) {
+      document.getElementById('header-model-ver').textContent = `Model: ${data.active_version}`;
+      return data.active_version;
+    }
+  } catch (e) {}
+  document.getElementById('header-model-ver').textContent = 'Model: Unknown';
+}
+
+async function loadMLOps() {
+  const tbody = document.getElementById('mlops-history-body');
+  tbody.innerHTML = '<tr><td colspan="7" class="loading-row">Loading registry runs…</td></tr>';
+  
+  try {
+    const res  = await fetch('/api/mlops/history');
+    const data = await res.json();
+    if (data.success) {
+      renderMLOpsDashboard(data);
+    } else {
+      showToast('❌ Failed to load MLOps: ' + data.error);
+    }
+  } catch (e) {
+    showToast('❌ Failed to connect to registry API.');
+  }
+}
+
+function renderMLOpsDashboard(data) {
+  const activeVer = data.active_version;
+  const history = data.history || [];
+  
+  const activeRun = history.find(run => run.version === activeVer) || {};
+  
+  document.getElementById('mlops-active-ver').textContent = activeVer || 'None';
+  document.getElementById('mlops-active-r2').textContent = activeRun.r2 !== undefined ? activeRun.r2 : '—';
+  document.getElementById('mlops-active-mae').textContent = activeRun.mae !== undefined ? activeRun.mae : '—';
+  document.getElementById('mlops-active-size').textContent = activeRun.data_size !== undefined ? activeRun.data_size : '—';
+  document.getElementById('mlops-active-date').textContent = activeRun.created_at || '—';
+  
+  if (activeVer) {
+    document.getElementById('header-model-ver').textContent = `Model: ${activeVer}`;
+  }
+  
+  document.getElementById('mlops-runs-count').textContent = `${history.length} model version${history.length !== 1 ? 's' : ''} registered`;
+  
+  const tbody = document.getElementById('mlops-history-body');
+  if (!history.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="loading-row">No runs registered yet. Retrain the model to create one.</td></tr>';
+    return;
+  }
+  
+  const rowsHtml = [...history].reverse().map(run => {
+    const isActive = run.version === activeVer;
+    const statusBadge = isActive 
+      ? '<span class="mlops-badge active-badge">Serving</span>' 
+      : '<span class="mlops-badge idle-badge">Idle</span>';
+      
+    const actionBtn = isActive 
+      ? '<button class="rollback-btn disabled" disabled>Active</button>' 
+      : `<button class="rollback-btn" onclick="rollbackToVersion('${run.version}')">Activate</button>`;
+      
+    return `
+      <tr class="${isActive ? 'row-active' : ''}">
+        <td class="ver-cell font-bold">${run.version}</td>
+        <td>${run.created_at}</td>
+        <td>${run.data_size} students</td>
+        <td class="score-cell">${run.r2}</td>
+        <td>${run.mae}</td>
+        <td>${statusBadge}</td>
+        <td>${actionBtn}</td>
+      </tr>
+    `;
+  }).join('');
+  
+  tbody.innerHTML = rowsHtml;
+}
+
+async function rollbackToVersion(version) {
+  if (!confirm(`Are you sure you want to activate/rollback to model version ${version}?`)) return;
+  try {
+    const res = await fetch('/api/mlops/rollback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`✅ Successfully activated model version ${version}!`);
+      loadMLOps();
+    } else {
+      showToast('❌ Rollback failed: ' + data.error);
+    }
+  } catch (e) {
+    showToast('❌ Failed to connect to rollback API.');
+  }
+}
+
+async function triggerManualRetrain() {
+  const btn = document.querySelector('.mlops-btn');
+  btn.style.opacity = '0.7';
+  btn.style.pointerEvents = 'none';
+  btn.querySelector('span').textContent = 'Pipeline running...';
+  
+  try {
+    const res = await fetch('/api/retrain', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`✅ Model retrained successfully! Version ${data.active_version} created.`);
+      loadMLOps();
+    } else {
+      showToast('❌ Retrain failed: ' + data.error);
+    }
+  } catch (e) {
+    showToast('❌ Connection error during retraining.');
+  } finally {
+    btn.style.opacity = '1';
+    btn.style.pointerEvents = 'auto';
+    btn.querySelector('span').textContent = '↻ Force Pipeline Retraining';
+  }
 }
 
 // ── INIT ───────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   bindSliders();
   injectRingGradient();
-  // Pre-warm: load insights data for stats even on predict tab
+  fetchActiveModelVersion();
 });

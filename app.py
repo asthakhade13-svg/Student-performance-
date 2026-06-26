@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import joblib
 import os
+import json
+from datetime import datetime
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
@@ -10,8 +12,12 @@ from sklearn.metrics import mean_absolute_error, r2_score
 app = Flask(__name__, static_folder='static')
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, 'student_performance_model.pkl')
+MODELS_DIR = os.path.join(BASE_DIR, 'models')
+REGISTRY_PATH = os.path.join(MODELS_DIR, 'registry.json')
 CSV_PATH = os.path.join(BASE_DIR, 'student_data.csv')
+
+# Ensure models dir exists
+os.makedirs(MODELS_DIR, exist_ok=True)
 
 DEFAULT_DATA = {
     "study_hours": [2, 4, 6, 8, 1, 5, 7, 3, 9, 4],
@@ -29,32 +35,117 @@ def load_or_create_data():
     return pd.read_csv(CSV_PATH)
 
 
+# ── MLOps Registry & Validation Helpers ───────────────────────────────
+
+def load_registry():
+    if os.path.exists(REGISTRY_PATH):
+        try:
+            with open(REGISTRY_PATH, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"active_version": None, "history": []}
+
+
+def save_registry(registry):
+    with open(REGISTRY_PATH, 'w') as f:
+        json.dump(registry, f, indent=2)
+
+
+def validate_student_data(data, is_predict=False):
+    try:
+        sh = float(data.get('study_hours'))
+        att = float(data.get('attendance'))
+        pm = float(data.get('previous_marks'))
+        ac = float(data.get('assignments_completed'))
+        
+        if not (0 <= sh <= 12):
+            return False, "Study Hours must be between 0 and 12."
+        if not (0 <= att <= 100):
+            return False, "Attendance must be between 0 and 100%."
+        if not (0 <= pm <= 100):
+            return False, "Previous Marks must be between 0 and 100."
+        if not (0 <= ac <= 10):
+            return False, "Assignments Completed must be between 0 and 10."
+            
+        if not is_predict:
+            fs = float(data.get('final_score'))
+            if not (0 <= fs <= 100):
+                return False, "Final Score must be between 0 and 100."
+                
+        return True, None
+    except (ValueError, TypeError):
+        return False, "Input values must be numeric and not empty."
+
+
 def train_model(df):
     X = df.drop("final_score", axis=1)
     y = df["final_score"]
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    # Train-test split (adjust test_size if dataset is too small)
+    if len(df) >= 5:
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    else:
+        X_train, X_test, y_train, y_test = X, X, y, y
+        
     model = RandomForestRegressor(n_estimators=100, random_state=42)
     model.fit(X_train, y_train)
+    
     preds = model.predict(X_test)
-    mae = round(mean_absolute_error(y_test, preds), 2)
-    r2 = round(r2_score(y_test, preds), 2)
-    joblib.dump(model, MODEL_PATH)
-    return model, mae, r2, X.columns.tolist()
+    mae = round(float(mean_absolute_error(y_test, preds)), 2)
+    r2 = round(float(r2_score(y_test, preds)), 2)
+    r2 = max(-1.0, r2)  # Floor R2 at -1.0 for UI display clarity
+    
+    # Registering model
+    registry = load_registry()
+    next_ver_num = len(registry.get("history", [])) + 1
+    version = f"v{next_ver_num}"
+    
+    model_filename = f"model_{version}.pkl"
+    model_filepath = os.path.join(MODELS_DIR, model_filename)
+    joblib.dump(model, model_filepath)
+    
+    entry = {
+        "version": version,
+        "path": model_filepath,
+        "r2": r2,
+        "mae": mae,
+        "data_size": len(df),
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    registry["history"].append(entry)
+    registry["active_version"] = version
+    
+    # Prune old files: Keep last 5 versions in files, but keep history in registry.json
+    if len(registry["history"]) > 5:
+        for run in registry["history"][:-5]:
+            old_path = run.get("path")
+            if old_path and os.path.exists(old_path) and run["version"] != registry["active_version"]:
+                try:
+                    os.remove(old_path)
+                except Exception:
+                    pass
+                    
+    save_registry(registry)
+    return model, mae, r2, X.columns.tolist(), version
 
 
 def get_model_and_stats():
     df = load_or_create_data()
-    if os.path.exists(MODEL_PATH):
-        model = joblib.load(MODEL_PATH)
-        X = df.drop("final_score", axis=1)
-        y = df["final_score"]
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        preds = model.predict(X_test)
-        mae = round(mean_absolute_error(y_test, preds), 2)
-        r2 = round(r2_score(y_test, preds), 2)
-        return model, mae, r2, X.columns.tolist()
-    else:
-        return train_model(df)
+    registry = load_registry()
+    active_ver = registry.get("active_version")
+    
+    if active_ver:
+        model_entry = next((item for item in registry["history"] if item["version"] == active_ver), None)
+        if model_entry and os.path.exists(model_entry["path"]):
+            try:
+                model = joblib.load(model_entry["path"])
+                return model, model_entry["mae"], model_entry["r2"], ["study_hours", "attendance", "previous_marks", "assignments_completed"], active_ver
+            except Exception:
+                pass
+                
+    # If loading active model fails, trigger training
+    return train_model(df)
 
 
 # ── Routes ──────────────────────────────────────────────────────────────
@@ -73,12 +164,18 @@ def static_files(filename):
 def predict():
     try:
         data = request.get_json()
+        
+        # Validation Check
+        is_valid, err_msg = validate_student_data(data, is_predict=True)
+        if not is_valid:
+            return jsonify({"success": False, "error": err_msg}), 400
+            
         study_hours = float(data['study_hours'])
         attendance = float(data['attendance'])
         previous_marks = float(data['previous_marks'])
         assignments_completed = float(data['assignments_completed'])
 
-        model, mae, r2, _ = get_model_and_stats()
+        model, mae, r2, _, active_ver = get_model_and_stats()
 
         student = pd.DataFrame({
             "study_hours": [study_hours],
@@ -110,7 +207,8 @@ def predict():
             "grade": grade,
             "grade_class": grade_class,
             "mae": mae,
-            "r2": r2
+            "r2": r2,
+            "active_version": active_ver
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -130,6 +228,12 @@ def get_dataset():
 def add_student():
     try:
         data = request.get_json()
+        
+        # Validation Check
+        is_valid, err_msg = validate_student_data(data, is_predict=False)
+        if not is_valid:
+            return jsonify({"success": False, "error": err_msg}), 400
+
         df = load_or_create_data()
         new_row = {
             "study_hours": float(data['study_hours']),
@@ -140,9 +244,15 @@ def add_student():
         }
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
         df.to_csv(CSV_PATH, index=False)
+        
         # Retrain model with new data
-        train_model(df)
-        return jsonify({"success": True, "message": "Student added and model retrained!", "total": len(df)})
+        _, mae, r2, _, active_ver = train_model(df)
+        return jsonify({
+            "success": True, 
+            "message": f"Student added and model {active_ver} retrained!", 
+            "total": len(df),
+            "active_version": active_ver
+        })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
 
@@ -155,8 +265,13 @@ def delete_student(index):
             return jsonify({"success": False, "error": "Invalid index"}), 400
         df = df.drop(index=index).reset_index(drop=True)
         df.to_csv(CSV_PATH, index=False)
-        train_model(df)
-        return jsonify({"success": True, "message": "Student deleted and model retrained!", "total": len(df)})
+        _, mae, r2, _, active_ver = train_model(df)
+        return jsonify({
+            "success": True, 
+            "message": f"Student deleted and model {active_ver} retrained!", 
+            "total": len(df),
+            "active_version": active_ver
+        })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
 
@@ -164,7 +279,7 @@ def delete_student(index):
 @app.route('/api/feature-importance', methods=['GET'])
 def feature_importance():
     try:
-        model, mae, r2, features = get_model_and_stats()
+        model, mae, r2, features, active_ver = get_model_and_stats()
         importance = model.feature_importances_.tolist()
         df = load_or_create_data()
         return jsonify({
@@ -173,7 +288,8 @@ def feature_importance():
             "importance": importance,
             "mae": mae,
             "r2": r2,
-            "total_students": len(df)
+            "total_students": len(df),
+            "active_version": active_ver
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -183,12 +299,79 @@ def feature_importance():
 def retrain():
     try:
         df = load_or_create_data()
-        _, mae, r2, _ = train_model(df)
-        return jsonify({"success": True, "message": "Model retrained successfully!", "mae": mae, "r2": r2})
+        _, mae, r2, _, active_ver = train_model(df)
+        return jsonify({
+            "success": True, 
+            "message": f"Model {active_ver} retrained successfully!", 
+            "mae": mae, 
+            "r2": r2,
+            "active_version": active_ver
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+# ── MLOps Specific Routes ─────────────────────────────────────────────
+
+@app.route('/api/mlops/history', methods=['GET'])
+def get_mlops_history():
+    try:
+        registry = load_registry()
+        # Clean paths for security/brevity before sending
+        history_clean = []
+        for run in registry.get("history", []):
+            run_copy = run.copy()
+            if "path" in run_copy:
+                run_copy["path"] = os.path.basename(run_copy["path"])
+            history_clean.append(run_copy)
+            
+        return jsonify({
+            "success": True,
+            "active_version": registry.get("active_version"),
+            "history": history_clean
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route('/api/mlops/rollback', methods=['POST'])
+def rollback_model():
+    try:
+        data = request.get_json()
+        target_version = data.get('version')
+        if not target_version:
+            return jsonify({"success": False, "error": "No target version provided"}), 400
+            
+        registry = load_registry()
+        # Verify target version exists in history
+        model_entry = next((item for item in registry["history"] if item["version"] == target_version), None)
+        if not model_entry:
+            return jsonify({"success": False, "error": f"Version {target_version} not found in history"}), 400
+            
+        # Check if the specific checkpoint pickle file still exists
+        model_filename = f"model_{target_version}.pkl"
+        model_filepath = os.path.join(MODELS_DIR, model_filename)
+        
+        if not os.path.exists(model_filepath):
+            return jsonify({
+                "success": False, 
+                "error": f"Model checkpoint for {target_version} was pruned or deleted from disk."
+            }), 400
+            
+        registry["active_version"] = target_version
+        save_registry(registry)
+        
+        return jsonify({
+            "success": True, 
+            "message": f"Successfully rolled back to version {target_version}",
+            "active_version": target_version
+        })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
 
 
 if __name__ == '__main__':
     load_or_create_data()
-    app.run(debug=True, port=5000)
+    app.run(debug=False, port=5000)
+
+
