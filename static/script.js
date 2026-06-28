@@ -83,12 +83,31 @@ async function runPrediction() {
   }
 }
 
+let lastPredictionPayload = null;
+
 function showResult(data) {
   document.getElementById('result-placeholder').classList.add('hidden');
   const content = document.getElementById('result-content');
   content.classList.remove('hidden');
 
   const score = data.predicted_score;
+
+  // Save prediction details for AI Advisor
+  lastPredictionPayload = {
+    study_hours:           parseFloat(document.getElementById('study_hours').value),
+    attendance:            parseFloat(document.getElementById('attendance').value),
+    previous_marks:        parseFloat(document.getElementById('previous_marks').value),
+    assignments_completed: parseFloat(document.getElementById('assignments_completed').value),
+    predicted_score:       score
+  };
+
+  // Reset AI Advisor UI
+  const contentArea = document.getElementById('ai-content-area');
+  const generateBtn = document.getElementById('ai-generate-btn');
+  if (contentArea) contentArea.classList.add('hidden');
+  if (generateBtn) generateBtn.classList.remove('hidden');
+  const responseText = document.getElementById('ai-response-text');
+  if (responseText) responseText.innerHTML = '';
 
   // Animated counter
   animateCounter('score-display', 0, score, 1000);
@@ -426,6 +445,86 @@ async function triggerManualRetrain() {
     btn.style.pointerEvents = 'auto';
     btn.querySelector('span').textContent = '↻ Force Pipeline Retraining';
   }
+}
+
+// ── AI STUDY PLAN GENERATOR (LLM) ─────────────────────
+async function generateAISuggestions() {
+  if (!lastPredictionPayload) {
+    showToast('⚠️ No active prediction data found.');
+    return;
+  }
+
+  const generateBtn = document.getElementById('ai-generate-btn');
+  const contentArea = document.getElementById('ai-content-area');
+  const spinner = document.getElementById('ai-loading-spinner');
+  const responseText = document.getElementById('ai-response-text');
+
+  // Configure UI state
+  generateBtn.classList.add('hidden');
+  contentArea.classList.remove('hidden');
+  spinner.classList.remove('hidden');
+  responseText.innerHTML = '';
+
+  try {
+    const res = await fetch('/api/generate-advice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(lastPredictionPayload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      responseText.innerHTML = parseMarkdown(data.advice);
+      if (data.is_mock) {
+        showToast('💡 Displaying simulated coaching suggestions.');
+      } else {
+        showToast('✨ AI Coaching Plan generated successfully!');
+      }
+    } else {
+      showToast('❌ Advisor model failed: ' + data.error);
+      generateBtn.classList.remove('hidden');
+      contentArea.classList.add('hidden');
+    }
+  } catch (e) {
+    showToast('❌ Failed to reach the AI study adviser.');
+    generateBtn.classList.remove('hidden');
+    contentArea.classList.add('hidden');
+  } finally {
+    spinner.classList.add('hidden');
+  }
+}
+
+function parseMarkdown(md) {
+  if (!md) return '';
+  let html = md;
+  
+  // Basic escaping for security
+  html = html
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  // Re-allow blockquotes since we escaped '>'
+  html = html.replace(/^&gt;\s*(.*)$/gm, '<blockquote>$1</blockquote>');
+  
+  // Headings
+  html = html.replace(/^####\s+(.*)$/gm, '<h4>$1</h4>');
+  html = html.replace(/^###\s+(.*)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^##\s+(.*)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^#\s+(.*)$/gm, '<h1>$1</h1>');
+
+  // Bold Text
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+  // Bullet items
+  html = html.replace(/^[\*\-]\s+(.*)$/gm, '<li>$1</li>');
+  // Numbered items
+  html = html.replace(/^\d+\.\s+(.*)$/gm, '<li>$1</li>');
+
+  // Add spacers
+  html = html.replace(/\n\n/g, '<div class="ai-p-spacing"></div>');
+  html = html.replace(/\n/g, '<br/>');
+
+  return html;
 }
 
 // ── INIT ───────────────────────────────────────────────

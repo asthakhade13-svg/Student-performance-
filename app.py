@@ -5,11 +5,17 @@ import joblib
 import os
 import json
 from datetime import datetime
+import google.generativeai as genai
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
 
 app = Flask(__name__, static_folder='static')
+
+# Configure Gemini API
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
@@ -365,6 +371,79 @@ def rollback_model():
             "success": True, 
             "message": f"Successfully rolled back to version {target_version}",
             "active_version": target_version
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route('/api/generate-advice', methods=['POST'])
+def generate_advice():
+    try:
+        data = request.get_json()
+        study_hours = float(data.get('study_hours', 5.0))
+        attendance = float(data.get('attendance', 80.0))
+        previous_marks = float(data.get('previous_marks', 70.0))
+        assignments_completed = float(data.get('assignments_completed', 6.0))
+        predicted_score = float(data.get('predicted_score', 65.0))
+
+        # Check if API Key is configured
+        if not GEMINI_API_KEY:
+            # Return a high-quality simulated mock recommendation when no key is set
+            mock_plan = (
+                "### 🎓 Personalized AI Academic Advisory Report\n\n"
+                "> 💡 *Notice: Gemini API Key is not set in environment variables. Displaying simulated data-driven plan.*\n\n"
+                "#### 🔍 1. Strength & Risk Factor Analysis\n"
+                f"*   **Attendance ({attendance}%)**: " + 
+                ("Excellent! You are attending class regularly, which builds a strong foundation." if attendance >= 85 
+                 else "Moderate. Increasing attendance to 85%+ will help capture key topics.") + "\n"
+                f"*   **Study Time ({study_hours} hrs/day)**: " + 
+                ("Outstanding dedication! You are studying consistently." if study_hours >= 7 
+                 else "Room for improvement. Adding 1-2 study hours daily could yield significant score increases.") + "\n"
+                f"*   **Assignments ({assignments_completed}/10)**: " + 
+                ("High completion! You are practicing and staying on track." if assignments_completed >= 8 
+                 else "Critical risk. Completing assignments builds practical skills. Aim for 9/10.") + "\n\n"
+                "#### 📅 2. Custom 4-Week Action Planner\n"
+                "*   **Week 1 (Establish Foundations)**: Allocate 45 minutes daily to review notes immediately after class. Focus on outstanding assignments.\n"
+                "*   **Week 2 (Target Weak Areas)**: Form a study group or attend office hours to address topics where previous marks were dropped.\n"
+                "*   **Week 3 (Practice & Reinforce)**: Solve previous practice tests under exam conditions to build time-management confidence.\n"
+                "*   **Week 4 (Review & Optimize)**: Focus on light retrieval practice. Get at least 8 hours of sleep before exam day.\n\n"
+                "#### 💡 3. Recommended Daily Habits\n"
+                "1.  **Pomodoro Study Method**: Work in 25-minute blocks with 5-minute breaks to maintain focus.\n"
+                "2.  **Mistake Journaling**: Track incorrect practice answers and solve them from scratch twice.\n"
+                "3.  **Active Recall**: Verbally summarize what you learned in class without looking at your slides."
+            )
+            return jsonify({
+                "success": True,
+                "advice": mock_plan,
+                "is_mock": True
+            })
+
+        # Set up Gemini model
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        
+        # Construct Prompt
+        prompt = (
+            "You are EduPredict Advisor, an expert academic counselor. "
+            "Analyze the following student profile and generate a highly personalized, structured study advisory report in clean Markdown:\n\n"
+            f"- Daily Study Hours: {study_hours} hours/day (target/max: 12)\n"
+            f"- Class Attendance: {attendance}%\n"
+            f"- Previous Exam Marks: {previous_marks}/100\n"
+            f"- Assignments Completed: {assignments_completed}/10\n"
+            f"- AI Predicted Final Exam Score: {predicted_score}/100\n\n"
+            "Include these exact three sections, using headers:\n"
+            "1. Strength & Risk Factor Analysis: Analyze their metrics. Compare parameters and point out major areas causing lower scores vs. areas keeping them afloat.\n"
+            "2. Custom 4-Week Action Planner: A specific, week-by-week plan detailing study subjects or practices to raise their grade.\n"
+            "3. Recommended Daily Habits: Provide 3-4 specific behavioral habits (e.g. Pomodoro, active recall, sleep guidelines) based on their profile.\n\n"
+            "Keep the tone motivational, specific, and actionable. Use bullet points and clean formatting. Do not use generic advice."
+        )
+
+        response = model.generate_content(prompt)
+        advice_text = response.text
+
+        return jsonify({
+            "success": True,
+            "advice": advice_text,
+            "is_mock": False
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
