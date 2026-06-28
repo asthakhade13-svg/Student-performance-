@@ -670,6 +670,16 @@ body {
   font-weight: 500;
   color: #7c3a00;
 }
+.ai-response-text ul {
+  list-style-type: disc;
+  margin-bottom: 12px;
+  padding-left: 10px;
+}
+.ai-response-text ol {
+  list-style-type: decimal;
+  margin-bottom: 12px;
+  padding-left: 10px;
+}
 .ai-response-text li {
   margin-left: 20px;
   margin-bottom: 6px;

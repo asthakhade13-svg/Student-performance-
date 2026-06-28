@@ -515,12 +515,59 @@ function parseMarkdown(md) {
   // Bold Text
   html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
 
-  // Bullet items
-  html = html.replace(/^[\*\-]\s+(.*)$/gm, '<li>$1</li>');
-  // Numbered items
-  html = html.replace(/^\d+\.\s+(.*)$/gm, '<li>$1</li>');
+  // Lists
+  // Parse lines to detect list blocks
+  let lines = html.split('\n');
+  let inUl = false;
+  let inOl = false;
+  
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim();
+    
+    // Unordered list items: starts with * or -
+    if (/^[\*\-]\s+(.*)$/.test(line)) {
+      lines[i] = lines[i].replace(/^[\*\-]\s+(.*)$/, '<li>$1</li>');
+      if (!inUl) {
+        lines[i] = '<ul>' + lines[i];
+        inUl = true;
+      }
+      if (inOl) {
+        lines[i] = '</ol>' + lines[i];
+        inOl = false;
+      }
+    } 
+    // Ordered list items: starts with digits + dot
+    else if (/^\d+\.\s+(.*)$/.test(line)) {
+      lines[i] = lines[i].replace(/^\d+\.\s+(.*)$/, '<li>$1</li>');
+      if (!inOl) {
+        lines[i] = '<ol>' + lines[i];
+        inOl = true;
+      }
+      if (inUl) {
+        lines[i] = '</ul>' + lines[i];
+        inUl = false;
+      }
+    } 
+    // Regular line
+    else {
+      if (inUl) {
+        lines[i] = '</ul>' + lines[i];
+        inUl = false;
+      }
+      if (inOl) {
+        lines[i] = '</ol>' + lines[i];
+        inOl = false;
+      }
+    }
+  }
+  
+  // Close any open lists at the end
+  if (inUl) lines[lines.length - 1] += '</ul>';
+  if (inOl) lines[lines.length - 1] += '</ol>';
+  
+  html = lines.join('\n');
 
-  // Add spacers
+  // Add spacers for paragraphs
   html = html.replace(/\n\n/g, '<div class="ai-p-spacing"></div>');
   html = html.replace(/\n/g, '<br/>');
 
