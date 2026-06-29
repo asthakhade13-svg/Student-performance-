@@ -147,6 +147,14 @@ function showResult(data) {
     fb.className += ' feedback-low';
     fb.textContent = '⚠️ Below average prediction. Focus on boosting attendance, study time, and assignment completion rate.';
   }
+
+  // Trigger GSAP Sparkle Burst around the score ring
+  const scoreCenter = document.querySelector('.score-center');
+  if (scoreCenter) {
+    setTimeout(() => {
+      spawnSparkles(scoreCenter, 30);
+    }, 450);
+  }
 }
 
 function animateCounter(id, from, to, duration) {
@@ -475,6 +483,12 @@ async function generateAISuggestions() {
       } else {
         showToast('✨ AI Coaching Plan generated successfully!');
       }
+      
+      // Trigger GSAP sparkles on AI Header icon
+      const aiIcon = document.querySelector('.ai-icon');
+      if (aiIcon) {
+        spawnSparkles(aiIcon, 25);
+      }
     } else {
       showToast('❌ Advisor model failed: ' + data.error);
       generateBtn.classList.remove('hidden');
@@ -568,6 +582,52 @@ function parseMarkdown(md) {
   html = html.replace(/\n/g, '<br/>');
 
   return html;
+}
+
+function spawnSparkles(targetElement, count = 25) {
+  if (!window.gsap) return;
+  
+  const rect = targetElement.getBoundingClientRect();
+  const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+  const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+  const centerX = rect.left + rect.width / 2 + scrollLeft;
+  const centerY = rect.top + rect.height / 2 + scrollTop;
+  
+  const colors = ['#FFCD7F', '#C5FF7F', '#ffffff', '#ffb703', '#5a8a00', '#c97a00'];
+  
+  for (let i = 0; i < count; i++) {
+    const sparkle = document.createElement('div');
+    const isStar = Math.random() > 0.4;
+    sparkle.className = `gsap-sparkle ${isStar ? 'star' : ''}`;
+    
+    const size = Math.floor(Math.random() * 8) + 6;
+    sparkle.style.width = `${size}px`;
+    sparkle.style.height = `${size}px`;
+    sparkle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+    
+    sparkle.style.left = `${centerX - size/2}px`;
+    sparkle.style.top = `${centerY - size/2}px`;
+    
+    document.body.appendChild(sparkle);
+    
+    const angle = Math.random() * Math.PI * 2;
+    const distance = Math.floor(Math.random() * 90) + 40;
+    const destX = Math.cos(angle) * distance;
+    const destY = Math.sin(angle) * distance;
+    
+    gsap.to(sparkle, {
+      x: destX,
+      y: destY,
+      rotation: Math.random() * 720 - 360,
+      opacity: 0,
+      scale: 0.1,
+      duration: Math.random() * 0.8 + 0.6,
+      ease: "power2.out",
+      onComplete: () => {
+        sparkle.remove();
+      }
+    });
+  }
 }
 
 // ── INIT ───────────────────────────────────────────────
