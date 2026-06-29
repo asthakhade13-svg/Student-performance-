@@ -147,10 +147,7 @@
                   <div class="pill-label">Model MAE</div>
                   <div class="pill-value" id="stat-mae">—</div>
                 </div>
-                <div class="stat-pill">
-                  <div class="pill-label">R² Score</div>
-                  <div class="pill-value" id="stat-r2">—</div>
-                </div>
+
                 <div class="stat-pill">
                   <div class="pill-label">Accuracy</div>
                   <div class="pill-value" id="stat-acc">—</div>
@@ -285,11 +282,7 @@
         <div class="card stats-card">
           <h2 class="card-title">🏆 Model Performance</h2>
           <div class="big-stats">
-            <div class="big-stat">
-              <div class="big-stat-value" id="ins-r2">—</div>
-              <div class="big-stat-label">R² Score</div>
-              <div class="big-stat-sub">Model fit quality</div>
-            </div>
+
             <div class="big-stat">
               <div class="big-stat-value" id="ins-mae">—</div>
               <div class="big-stat-label">Mean Absolute Error</div>
@@ -372,10 +365,7 @@
               <span class="detail-label">Active Version:</span>
               <span class="detail-val highlight" id="mlops-active-ver">—</span>
             </div>
-            <div class="detail-row">
-              <span class="detail-label">Training R² Score:</span>
-              <span class="detail-val" id="mlops-active-r2">—</span>
-            </div>
+
             <div class="detail-row">
               <span class="detail-label">Training MAE:</span>
               <span class="detail-val" id="mlops-active-mae">—</span>
@@ -440,14 +430,13 @@
                   <th>Version</th>
                   <th>Created Date</th>
                   <th>Dataset Size</th>
-                  <th>R² Score</th>
                   <th>MAE</th>
                   <th>Status</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody id="mlops-history-body">
-                <tr><td colspan="7" class="loading-row">Loading run logs…</td></tr>
+                <tr><td colspan="6" class="loading-row">Loading run logs…</td></tr>
               </tbody>
             </table>
           </div>

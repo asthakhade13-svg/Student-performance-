@@ -131,7 +131,6 @@ function showResult(data) {
 
   // Stats pills
   document.getElementById('stat-mae').textContent = data.mae;
-  document.getElementById('stat-r2').textContent  = data.r2;
   const acc = Math.round((1 - data.mae / 100) * 100);
   document.getElementById('stat-acc').textContent = acc + '%';
 
@@ -271,7 +270,6 @@ const FEATURE_LABELS = {
 
 function renderInsights(data) {
   // Big stats
-  document.getElementById('ins-r2').textContent       = data.r2;
   document.getElementById('ins-mae').textContent      = data.mae;
   document.getElementById('ins-students').textContent = data.total_students;
 
@@ -360,7 +358,6 @@ function renderMLOpsDashboard(data) {
   const activeRun = history.find(run => run.version === activeVer) || {};
   
   document.getElementById('mlops-active-ver').textContent = activeVer || 'None';
-  document.getElementById('mlops-active-r2').textContent = activeRun.r2 !== undefined ? activeRun.r2 : '—';
   document.getElementById('mlops-active-mae').textContent = activeRun.mae !== undefined ? activeRun.mae : '—';
   document.getElementById('mlops-active-size').textContent = activeRun.data_size !== undefined ? activeRun.data_size : '—';
   document.getElementById('mlops-active-date').textContent = activeRun.created_at || '—';
@@ -373,7 +370,7 @@ function renderMLOpsDashboard(data) {
   
   const tbody = document.getElementById('mlops-history-body');
   if (!history.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="loading-row">No runs registered yet. Retrain the model to create one.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="loading-row">No runs registered yet. Retrain the model to create one.</td></tr>';
     return;
   }
   
@@ -392,7 +389,6 @@ function renderMLOpsDashboard(data) {
         <td class="ver-cell font-bold">${run.version}</td>
         <td>${run.created_at}</td>
         <td>${run.data_size} students</td>
-        <td class="score-cell">${run.r2}</td>
         <td>${run.mae}</td>
         <td>${statusBadge}</td>
         <td>${actionBtn}</td>
