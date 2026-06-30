@@ -129,10 +129,7 @@ function showResult(data) {
     document.getElementById('perf-bar').style.width = score + '%';
   }, 100);
 
-  // Stats pills
-  document.getElementById('stat-mae').textContent = data.mae;
-  const acc = Math.round((1 - data.mae / 100) * 100);
-  document.getElementById('stat-acc').textContent = acc + '%';
+
 
   // Feedback
   const fb = document.getElementById('feedback-box');
@@ -277,8 +274,6 @@ const FEATURE_LABELS = {
 };
 
 function renderInsights(data) {
-  // Big stats
-  document.getElementById('ins-mae').textContent      = data.mae;
   document.getElementById('ins-students').textContent = data.total_students;
 
   // Chart bars
