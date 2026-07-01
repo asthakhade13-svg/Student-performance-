@@ -73,10 +73,10 @@ async function runPrediction() {
     if (data.success) {
       showResult(data);
     } else {
-      showToast('❌ Prediction failed: ' + data.error);
+      showToast('Prediction failed: ' + data.error);
     }
   } catch (e) {
-    showToast('❌ Could not connect to server.');
+    showToast('Could not connect to server.');
   } finally {
     btn.classList.remove('loading');
     btn.querySelector('span:last-child').textContent = 'Predict Score';
@@ -136,13 +136,13 @@ function showResult(data) {
   fb.className = 'feedback-box visible';
   if (score >= 80) {
     fb.className += ' feedback-good';
-    fb.textContent = '🌟 Excellent performance predicted! Keep up the strong study habits and consistent attendance.';
+    fb.textContent = 'Excellent performance predicted! Keep up the strong study habits and consistent attendance.';
   } else if (score >= 60) {
     fb.className += ' feedback-mid';
-    fb.textContent = '📈 Decent score! Try increasing study hours and completing more assignments to push into the A range.';
+    fb.textContent = 'Decent score! Try increasing study hours and completing more assignments to push into the A range.';
   } else {
     fb.className += ' feedback-low';
-    fb.textContent = '⚠️ Below average prediction. Focus on boosting attendance, study time, and assignment completion rate.';
+    fb.textContent = 'Below average prediction. Focus on boosting attendance, study time, and assignment completion rate.';
   }
 
   // Trigger GSAP Sparkle Burst around the score ring
@@ -220,14 +220,14 @@ async function addStudent() {
     });
     const data = await res.json();
     if (data.success) {
-      showFeedback('add-feedback', 'success', '✅ ' + data.message);
+      showFeedback('add-feedback', 'success', data.message);
       loadDataset();
-      showToast('✅ Student added and model retrained!');
+      showToast('Student added and model retrained!');
     } else {
-      showFeedback('add-feedback', 'error', '❌ ' + data.error);
+      showFeedback('add-feedback', 'error', data.error);
     }
   } catch (e) {
-    showFeedback('add-feedback', 'error', '❌ Failed to connect to server.');
+    showFeedback('add-feedback', 'error', 'Failed to connect to server.');
   }
 }
 
@@ -238,12 +238,12 @@ async function deleteStudent(index) {
     const data = await res.json();
     if (data.success) {
       loadDataset();
-      showToast('🗑 Record deleted and model retrained!');
+      showToast('Record deleted and model retrained!');
     } else {
-      showToast('❌ ' + data.error);
+      showToast(data.error);
     }
   } catch (e) {
-    showToast('❌ Failed to connect to server.');
+    showToast('Failed to connect to server.');
   }
 }
 
@@ -347,10 +347,10 @@ async function loadMLOps() {
     if (data.success) {
       renderMLOpsDashboard(data);
     } else {
-      showToast('❌ Failed to load MLOps: ' + data.error);
+      showToast('Failed to load MLOps: ' + data.error);
     }
   } catch (e) {
-    showToast('❌ Failed to connect to registry API.');
+    showToast('Failed to connect to registry API.');
   }
 }
 
@@ -412,13 +412,13 @@ async function rollbackToVersion(version) {
     });
     const data = await res.json();
     if (data.success) {
-      showToast(`✅ Successfully activated model version ${version}!`);
+      showToast(`Successfully activated model version ${version}!`);
       loadMLOps();
     } else {
-      showToast('❌ Rollback failed: ' + data.error);
+      showToast('Rollback failed: ' + data.error);
     }
   } catch (e) {
-    showToast('❌ Failed to connect to rollback API.');
+    showToast('Failed to connect to rollback API.');
   }
 }
 
@@ -432,24 +432,24 @@ async function triggerManualRetrain() {
     const res = await fetch('/api/retrain', { method: 'POST' });
     const data = await res.json();
     if (data.success) {
-      showToast(`✅ Model retrained successfully! Version ${data.active_version} created.`);
+      showToast(`Model retrained successfully! Version ${data.active_version} created.`);
       loadMLOps();
     } else {
-      showToast('❌ Retrain failed: ' + data.error);
+      showToast('Retrain failed: ' + data.error);
     }
   } catch (e) {
-    showToast('❌ Connection error during retraining.');
+    showToast('Connection error during retraining.');
   } finally {
     btn.style.opacity = '1';
     btn.style.pointerEvents = 'auto';
-    btn.querySelector('span').textContent = '↻ Force Pipeline Retraining';
+    btn.querySelector('span').textContent = 'Force Pipeline Retraining';
   }
 }
 
 // ── AI STUDY PLAN GENERATOR (LLM) ─────────────────────
 async function generateAISuggestions() {
   if (!lastPredictionPayload) {
-    showToast('⚠️ No active prediction data found.');
+    showToast('No active prediction data found.');
     return;
   }
 
@@ -474,9 +474,9 @@ async function generateAISuggestions() {
     if (data.success) {
       responseText.innerHTML = parseMarkdown(data.advice);
       if (data.is_mock) {
-        showToast('💡 Displaying simulated coaching suggestions.');
+        showToast('Displaying simulated coaching suggestions.');
       } else {
-        showToast('✨ AI Coaching Plan generated successfully!');
+        showToast('AI Coaching Plan generated successfully!');
       }
       
       // Trigger GSAP sparkles on AI Header icon
@@ -485,12 +485,12 @@ async function generateAISuggestions() {
         spawnSparkles(aiIcon, 25);
       }
     } else {
-      showToast('❌ Advisor model failed: ' + data.error);
+      showToast('Advisor model failed: ' + data.error);
       generateBtn.classList.remove('hidden');
       contentArea.classList.add('hidden');
     }
   } catch (e) {
-    showToast('❌ Failed to reach the AI study adviser.');
+    showToast('Failed to reach the AI study adviser.');
     generateBtn.classList.remove('hidden');
     contentArea.classList.add('hidden');
   } finally {

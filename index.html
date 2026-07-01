@@ -22,18 +22,18 @@
   <header class="header">
     <div class="header-inner">
       <div class="logo">
-        <div class="logo-icon">🎓</div>
+        <div class="logo-icon"></div>
         <div>
           <span class="logo-title">EduPredict</span>
           <span class="logo-sub">AI Performance Analytics</span>
         </div>
       </div>
       <nav class="nav">
-        <button class="nav-btn active" data-tab="predict" id="nav-predict">🔮 Predict</button>
+        <button class="nav-btn active" data-tab="predict" id="nav-predict">Predict</button>
         <!-- Hiding Dataset and MLOps buttons for regular users -->
-        <!-- <button class="nav-btn" data-tab="dataset" id="nav-dataset">📊 Dataset</button> -->
-        <button class="nav-btn" data-tab="insights" id="nav-insights">📈 Insights</button>
-        <!-- <button class="nav-btn" data-tab="mlops" id="nav-mlops">🛠 MLOps</button> -->
+        <!-- <button class="nav-btn" data-tab="dataset" id="nav-dataset">Dataset</button> -->
+        <button class="nav-btn" data-tab="insights" id="nav-insights">Insights</button>
+        <!-- <button class="nav-btn" data-tab="mlops" id="nav-mlops">MLOps</button> -->
       </nav>
       <div class="model-badge">
         <span class="badge-dot"></span>
@@ -60,7 +60,7 @@
         <!-- Input Form -->
         <div class="card form-card">
           <div class="card-header">
-            <h2>📝 Student Parameters</h2>
+            <h2>Student Parameters</h2>
             <p>Adjust values using sliders or type directly</p>
           </div>
 
@@ -68,7 +68,6 @@
 
             <div class="field-group">
               <div class="field-label">
-                <span class="field-icon">📚</span>
                 <label for="study_hours">Study Hours / Day</label>
                 <span class="field-value" id="val-study">6</span>
               </div>
@@ -78,7 +77,6 @@
 
             <div class="field-group">
               <div class="field-label">
-                <span class="field-icon">🏫</span>
                 <label for="attendance">Attendance (%)</label>
                 <span class="field-value" id="val-attendance">85</span>
               </div>
@@ -88,7 +86,6 @@
 
             <div class="field-group">
               <div class="field-label">
-                <span class="field-icon">📋</span>
                 <label for="previous_marks">Previous Marks</label>
                 <span class="field-value" id="val-marks">75</span>
               </div>
@@ -98,7 +95,6 @@
 
             <div class="field-group">
               <div class="field-label">
-                <span class="field-icon">✅</span>
                 <label for="assignments_completed">Assignments Completed</label>
                 <span class="field-value" id="val-assign">8</span>
               </div>
@@ -109,7 +105,6 @@
           </div>
 
           <button class="predict-btn" id="predict-btn" onclick="runPrediction()">
-            <span class="btn-icon">🔮</span>
             <span>Predict Score</span>
           </button>
 
@@ -118,7 +113,7 @@
         <!-- Result Card -->
         <div class="card result-card" id="result-card">
           <div class="result-placeholder" id="result-placeholder">
-            <div class="placeholder-icon">🎯</div>
+            <div class="placeholder-icon"></div>
             <p>Adjust the sliders and click <strong>Predict Score</strong> to see the AI prediction</p>
           </div>
 
@@ -151,13 +146,13 @@
             <div class="ai-advisor-section" id="ai-advisor-section">
               <hr class="ai-divider" />
               <div class="ai-header">
-                <span class="ai-icon">✨</span>
+                <span class="ai-icon"></span>
                 <h3>EduPredict AI Study Advisor</h3>
               </div>
               <p class="ai-description">Get a personalized, data-driven 4-week study planner and target daily habits based on your predicted performance.</p>
               
               <button class="add-btn ai-generate-btn" id="ai-generate-btn" onclick="generateAISuggestions()">
-                <span>🎓 Generate AI Coaching Plan</span>
+                <span>Generate AI Coaching Plan</span>
               </button>
               
               <div class="ai-content-area hidden" id="ai-content-area">
@@ -189,7 +184,7 @@
         <!-- Add Student Form -->
         <div class="card add-card">
           <div class="card-header">
-            <h2>➕ Add New Student</h2>
+            <h2>Add New Student</h2>
             <p>Record will be saved & model retrained</p>
           </div>
           <div class="add-form">
@@ -218,7 +213,7 @@
               <input type="number" id="add-score" min="0" max="100" value="75" placeholder="0–100" />
             </div>
             <button class="add-btn" onclick="addStudent()">
-              <span>➕ Add Student Record</span>
+              <span>Add Student Record</span>
             </button>
             <div class="add-feedback" id="add-feedback"></div>
           </div>
@@ -228,10 +223,10 @@
         <div class="card table-card">
           <div class="table-header">
             <div>
-              <h2>📋 Student Records</h2>
+              <h2>Student Records</h2>
               <p class="record-count" id="record-count">Loading...</p>
             </div>
-            <button class="refresh-btn" onclick="loadDataset()">↻ Refresh</button>
+            <button class="refresh-btn" onclick="loadDataset()">Refresh</button>
           </div>
           <div class="table-wrap">
             <table class="data-table" id="data-table">
@@ -270,7 +265,7 @@
 
         <!-- Model Stats -->
         <div class="card stats-card">
-          <h2 class="card-title">🏆 Cohort Summary</h2>
+          <h2 class="card-title">Cohort Summary</h2>
           <div class="big-stats">
 
             <div class="big-stat">
@@ -283,7 +278,7 @@
 
         <!-- Feature Importance Chart -->
         <div class="card chart-card">
-          <h2 class="card-title">🧠 Feature Importance</h2>
+          <h2 class="card-title">Feature Importance</h2>
           <p class="card-sub">How much each factor influences the predicted score</p>
           <div class="chart-bars" id="chart-bars">
             <div class="loading-placeholder">Loading chart…</div>
@@ -292,31 +287,31 @@
 
         <!-- Tips -->
         <div class="card tips-card">
-          <h2 class="card-title">💡 Improvement Tips</h2>
+          <h2 class="card-title">Improvement Tips</h2>
           <div class="tips-list" id="tips-list">
             <div class="tip-item">
-              <div class="tip-icon">📚</div>
+              <div class="tip-icon"></div>
               <div>
                 <strong>Increase Study Hours</strong>
                 <p>Even 1 extra hour/day can significantly boost scores. Consistency matters more than intensity.</p>
               </div>
             </div>
             <div class="tip-item">
-              <div class="tip-icon">🏫</div>
+              <div class="tip-icon"></div>
               <div>
                 <strong>Improve Attendance</strong>
                 <p>Attending classes ensures you don't miss key concepts. Aim for 85%+ attendance.</p>
               </div>
             </div>
             <div class="tip-item">
-              <div class="tip-icon">✅</div>
+              <div class="tip-icon"></div>
               <div>
                 <strong>Complete Assignments</strong>
                 <p>Assignments reinforce learning. Completing all tasks shows discipline and commitment.</p>
               </div>
             </div>
             <div class="tip-item">
-              <div class="tip-icon">📋</div>
+              <div class="tip-icon"></div>
               <div>
                 <strong>Review Past Mistakes</strong>
                 <p>Learn from previous test errors. Understanding past failures improves future performance.</p>
@@ -342,7 +337,7 @@
         <!-- Active Model Stats Card -->
         <div class="card active-model-card">
           <div class="card-header">
-            <h2>🛠 Active Production Model</h2>
+            <h2>Active Production Model</h2>
             <p>Currently serving inference requests</p>
           </div>
           <div class="active-model-details">
@@ -366,14 +361,14 @@
           </div>
           
           <button class="predict-btn mlops-btn" onclick="triggerManualRetrain()">
-            <span>↻ Force Pipeline Retraining</span>
+            <span>Force Pipeline Retraining</span>
           </button>
         </div>
 
         <!-- Validation Rules Panel -->
         <div class="card validation-card">
           <div class="card-header">
-            <h2>🛡 Data Integrity & Validation Schema</h2>
+            <h2>Data Integrity & Validation Schema</h2>
             <p>Active bounds checking before training/predicting</p>
           </div>
           <div class="validation-rules">
@@ -404,7 +399,7 @@
         <div class="card registry-table-card">
           <div class="table-header">
             <div>
-              <h2>📋 Registry Checkpoint Logs</h2>
+              <h2>Registry Checkpoint Logs</h2>
               <p class="record-count" id="mlops-runs-count">0 model versions registered</p>
             </div>
           </div>

@@ -390,9 +390,9 @@ def generate_advice():
         if not GEMINI_API_KEY:
             # Return a high-quality simulated mock recommendation when no key is set
             mock_plan = (
-                "### 🎓 Personalized AI Academic Advisory Report\n\n"
-                "> 💡 *Notice: Gemini API Key is not set in environment variables. Displaying simulated data-driven plan.*\n\n"
-                "#### 🔍 1. Strength & Risk Factor Analysis\n"
+                "### Personalized AI Academic Advisory Report\n\n"
+                "> *Notice: Gemini API Key is not set in environment variables. Displaying simulated data-driven plan.*\n\n"
+                "#### 1. Strength & Risk Factor Analysis\n"
                 f"*   **Attendance ({attendance}%)**: " + 
                 ("Excellent! You are attending class regularly, which builds a strong foundation." if attendance >= 85 
                  else "Moderate. Increasing attendance to 85%+ will help capture key topics.") + "\n"
@@ -402,12 +402,12 @@ def generate_advice():
                 f"*   **Assignments ({assignments_completed}/10)**: " + 
                 ("High completion! You are practicing and staying on track." if assignments_completed >= 8 
                  else "Critical risk. Completing assignments builds practical skills. Aim for 9/10.") + "\n\n"
-                "#### 📅 2. Custom 4-Week Action Planner\n"
+                "#### 2. Custom 4-Week Action Planner\n"
                 "*   **Week 1 (Establish Foundations)**: Allocate 45 minutes daily to review notes immediately after class. Focus on outstanding assignments.\n"
                 "*   **Week 2 (Target Weak Areas)**: Form a study group or attend office hours to address topics where previous marks were dropped.\n"
                 "*   **Week 3 (Practice & Reinforce)**: Solve previous practice tests under exam conditions to build time-management confidence.\n"
                 "*   **Week 4 (Review & Optimize)**: Focus on light retrieval practice. Get at least 8 hours of sleep before exam day.\n\n"
-                "#### 💡 3. Recommended Daily Habits\n"
+                "#### 3. Recommended Daily Habits\n"
                 "1.  **Pomodoro Study Method**: Work in 25-minute blocks with 5-minute breaks to maintain focus.\n"
                 "2.  **Mistake Journaling**: Track incorrect practice answers and solve them from scratch twice.\n"
                 "3.  **Active Recall**: Verbally summarize what you learned in class without looking at your slides."
@@ -434,7 +434,7 @@ def generate_advice():
             "1. Strength & Risk Factor Analysis: Analyze their metrics. Compare parameters and point out major areas causing lower scores vs. areas keeping them afloat.\n"
             "2. Custom 4-Week Action Planner: A specific, week-by-week plan detailing study subjects or practices to raise their grade.\n"
             "3. Recommended Daily Habits: Provide 3-4 specific behavioral habits (e.g. Pomodoro, active recall, sleep guidelines) based on their profile.\n\n"
-            "Keep the tone motivational, specific, and actionable. Use bullet points and clean formatting. Do not use generic advice."
+            "Keep the tone motivational, specific, and actionable. Use bullet points and clean formatting. Do not use generic advice. Do not use any emojis or emoticons in the output."
         )
 
         response = model.generate_content(prompt)
