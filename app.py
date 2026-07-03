@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 import google.generativeai as genai
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestRegressor
+import xgboost as xgb
 from sklearn.metrics import mean_absolute_error, r2_score
 
 app = Flask(__name__, static_folder='static')
@@ -109,7 +109,7 @@ def train_model(df):
     else:
         X_train, X_test, y_train, y_test = X, X, y, y
         
-    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    model = xgb.XGBRegressor(n_estimators=100, max_depth=5, learning_rate=0.1, random_state=42)
     model.fit(X_train, y_train)
     
     preds = model.predict(X_test)
