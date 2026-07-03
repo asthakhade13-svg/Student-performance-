@@ -22,6 +22,20 @@ MODELS_DIR = os.path.join(BASE_DIR, 'models')
 REGISTRY_PATH = os.path.join(MODELS_DIR, 'registry.json')
 CSV_PATH = os.path.join(BASE_DIR, 'student_data.csv')
 
+# Feature Engineering Helpers
+FEATURE_COLS = ["study_hours", "attendance", "previous_marks", "assignments_completed", "study_hours_attendance", "study_hours_log", "assignment_marks_ratio"]
+
+def add_features(df):
+    df = df.copy()
+    # 1. Interaction Feature
+    df["study_hours_attendance"] = df["study_hours"] * df["attendance"]
+    # 2. Non-linear Transform (log scale)
+    df["study_hours_log"] = np.log1p(df["study_hours"])
+    # 3. Ratio Metric
+    df["assignment_marks_ratio"] = df["assignments_completed"] / (df["previous_marks"] + 1.0)
+    return df
+
+
 # Ensure models dir exists
 os.makedirs(MODELS_DIR, exist_ok=True)
 
@@ -85,8 +99,9 @@ def validate_student_data(data, is_predict=False):
 
 
 def train_model(df):
-    X = df.drop("final_score", axis=1)
-    y = df["final_score"]
+    processed_df = add_features(df)
+    X = processed_df.drop("final_score", axis=1)
+    y = processed_df["final_score"]
     
     # Train-test split (adjust test_size if dataset is too small)
     if len(df) >= 5:
@@ -146,7 +161,7 @@ def get_model_and_stats():
         if model_entry and os.path.exists(model_entry["path"]):
             try:
                 model = joblib.load(model_entry["path"])
-                return model, model_entry["mae"], model_entry["r2"], ["study_hours", "attendance", "previous_marks", "assignments_completed"], active_ver
+                return model, model_entry["mae"], model_entry["r2"], FEATURE_COLS, active_ver
             except Exception:
                 pass
                 
@@ -189,6 +204,7 @@ def predict():
             "previous_marks": [previous_marks],
             "assignments_completed": [assignments_completed]
         })
+        student = add_features(student)
 
         predicted_score = round(float(model.predict(student)[0]), 2)
         predicted_score = max(0, min(100, predicted_score))

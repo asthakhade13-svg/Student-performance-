@@ -267,10 +267,13 @@ async function loadInsights() {
 }
 
 const FEATURE_LABELS = {
-  study_hours:           '📚 Study Hours',
-  attendance:            '🏫 Attendance',
-  previous_marks:        '📋 Previous Marks',
-  assignments_completed: '✅ Assignments Done',
+  study_hours:            'Study Hours',
+  attendance:             'Attendance',
+  previous_marks:         'Previous Marks',
+  assignments_completed:  'Assignments Done',
+  study_hours_attendance: 'Study-Attendance Interaction',
+  study_hours_log:        'Study Efficiency Curve',
+  assignment_marks_ratio: 'Assignment/Marks Ratio'
 };
 
 function renderInsights(data) {
