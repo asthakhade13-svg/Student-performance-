@@ -6,7 +6,8 @@ import os
 import json
 from datetime import datetime
 import google.generativeai as genai
-from sklearn.model_selection import train_test_split
+import optuna
+from sklearn.model_selection import train_test_split, cross_val_score
 import xgboost as xgb
 from sklearn.metrics import mean_absolute_error, r2_score
 
@@ -109,7 +110,43 @@ def train_model(df):
     else:
         X_train, X_test, y_train, y_test = X, X, y, y
         
-    model = xgb.XGBRegressor(n_estimators=100, max_depth=5, learning_rate=0.1, random_state=42)
+    # Optuna Hyperparameter Optimization
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    
+    def objective(trial):
+        n_estimators = trial.suggest_int('n_estimators', 50, 250)
+        max_depth = trial.suggest_int('max_depth', 2, 7)
+        learning_rate = trial.suggest_float('learning_rate', 0.01, 0.2, log=True)
+        subsample = trial.suggest_float('subsample', 0.6, 1.0)
+        
+        model_trial = xgb.XGBRegressor(
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            learning_rate=learning_rate,
+            subsample=subsample,
+            random_state=42
+        )
+        
+        cv = min(5, len(X_train))
+        if cv < 2:
+            model_trial.fit(X_train, y_train)
+            preds_train = model_trial.predict(X_train)
+            return mean_absolute_error(y_train, preds_train)
+            
+        scores = cross_val_score(model_trial, X_train, y_train, cv=cv, scoring='neg_mean_absolute_error')
+        return -scores.mean()
+        
+    study = optuna.create_study(direction='minimize')
+    study.optimize(objective, n_trials=30)
+    best_params = study.best_params
+    
+    model = xgb.XGBRegressor(
+        n_estimators=best_params['n_estimators'],
+        max_depth=best_params['max_depth'],
+        learning_rate=best_params['learning_rate'],
+        subsample=best_params['subsample'],
+        random_state=42
+    )
     model.fit(X_train, y_train)
     
     preds = model.predict(X_test)
