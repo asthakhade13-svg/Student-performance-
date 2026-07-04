@@ -149,10 +149,22 @@ def train_model(df):
     )
     model.fit(X_train, y_train)
     
-    preds = model.predict(X_test)
-    mae = round(float(mean_absolute_error(y_test, preds)), 2)
-    r2 = round(float(r2_score(y_test, preds)), 2)
-    r2 = max(-1.0, r2)  # Floor R2 at -1.0 for UI display clarity
+    # K-Fold Cross-Validation Evaluation
+    cv = min(5, len(df))
+    if cv >= 2:
+        cv_mae_scores = cross_val_score(model, X, y, cv=cv, scoring='neg_mean_absolute_error')
+        mae_mean = round(float(-cv_mae_scores.mean()), 2)
+        mae_std = round(float(cv_mae_scores.std()), 2)
+        
+        cv_r2_scores = cross_val_score(model, X, y, cv=cv, scoring='r2')
+        r2_mean = round(float(cv_r2_scores.mean()), 2)
+        r2_mean = max(-1.0, r2_mean)
+    else:
+        preds = model.predict(X_test)
+        mae_mean = round(float(mean_absolute_error(y_test, preds)), 2)
+        mae_std = 0.0
+        r2_mean = round(float(r2_score(y_test, preds)), 2)
+        r2_mean = max(-1.0, r2_mean)
     
     # Registering model
     registry = load_registry()
@@ -166,8 +178,9 @@ def train_model(df):
     entry = {
         "version": version,
         "path": model_filepath,
-        "r2": r2,
-        "mae": mae,
+        "r2": r2_mean,
+        "mae": mae_mean,
+        "mae_std": mae_std,
         "data_size": len(df),
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
@@ -185,7 +198,7 @@ def train_model(df):
                     pass
                     
     save_registry(registry)
-    return model, mae, r2, X.columns.tolist(), version
+    return model, mae_mean, r2_mean, X.columns.tolist(), version
 
 
 def get_model_and_stats():

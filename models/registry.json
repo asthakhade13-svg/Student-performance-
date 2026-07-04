@@ -1,5 +1,5 @@
 {
-  "active_version": "v6",
+  "active_version": "v7",
   "history": [
     {
       "version": "v1",
@@ -48,6 +48,14 @@
       "mae": 3.48,
       "data_size": 12,
       "created_at": "2026-07-04 22:06:16"
+    },
+    {
+      "version": "v7",
+      "path": "C:\\Users\\Astha\\OneDrive\\Desktop\\student\\models\\model_v7.pkl",
+      "r2": 0.75,
+      "mae": 3.28,
+      "data_size": 12,
+      "created_at": "2026-07-04 22:09:39"
     }
   ]
 }
