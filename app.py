@@ -24,7 +24,11 @@ REGISTRY_PATH = os.path.join(MODELS_DIR, 'registry.json')
 CSV_PATH = os.path.join(BASE_DIR, 'student_data.csv')
 
 # Feature Engineering Helpers
-FEATURE_COLS = ["study_hours", "attendance", "previous_marks", "assignments_completed", "study_hours_attendance", "study_hours_log", "assignment_marks_ratio"]
+FEATURE_COLS = [
+    "study_hours", "attendance", "previous_marks", "assignments_completed", 
+    "sleep_hours", "lms_logins", "mock_exams",
+    "study_hours_attendance", "study_hours_log", "assignment_marks_ratio"
+]
 
 def add_features(df):
     df = df.copy()
@@ -41,11 +45,14 @@ def add_features(df):
 os.makedirs(MODELS_DIR, exist_ok=True)
 
 DEFAULT_DATA = {
-    "study_hours": [2, 4, 6, 8, 1, 5, 7, 3, 9, 4],
-    "attendance": [60, 75, 85, 90, 50, 80, 95, 65, 98, 70],
-    "previous_marks": [50, 65, 78, 88, 40, 70, 92, 55, 95, 60],
-    "assignments_completed": [4, 6, 8, 9, 2, 7, 10, 5, 10, 6],
-    "final_score": [55, 68, 80, 92, 45, 75, 96, 60, 99, 65]
+    "study_hours": [2.0, 4.0, 6.0, 8.0, 1.0, 5.0, 7.0, 3.0, 9.0, 4.0],
+    "attendance": [60.0, 75.0, 85.0, 90.0, 50.0, 80.0, 95.0, 65.0, 98.0, 70.0],
+    "previous_marks": [50.0, 65.0, 78.0, 88.0, 40.0, 70.0, 92.0, 55.0, 95.0, 60.0],
+    "assignments_completed": [4.0, 6.0, 8.0, 9.0, 2.0, 7.0, 10.0, 5.0, 10.0, 6.0],
+    "sleep_hours": [7.0, 6.5, 8.0, 7.5, 5.5, 8.0, 7.0, 7.5, 8.5, 6.0],
+    "lms_logins": [15, 25, 40, 45, 10, 30, 50, 20, 55, 28],
+    "mock_exams": [48.0, 68.0, 79.0, 87.0, 38.0, 74.0, 91.0, 58.0, 96.0, 62.0],
+    "final_score": [55.0, 68.0, 80.0, 92.0, 45.0, 75.0, 96.0, 60.0, 99.0, 65.0]
 }
 
 
@@ -53,7 +60,30 @@ def load_or_create_data():
     if not os.path.exists(CSV_PATH):
         df = pd.DataFrame(DEFAULT_DATA)
         df.to_csv(CSV_PATH, index=False)
-    return pd.read_csv(CSV_PATH)
+        return df
+    try:
+        df = pd.read_csv(CSV_PATH)
+        modified = False
+        if "sleep_hours" not in df.columns:
+            df["sleep_hours"] = 7.5
+            modified = True
+        if "lms_logins" not in df.columns:
+            df["lms_logins"] = 30.0
+            modified = True
+        if "mock_exams" not in df.columns:
+            df["mock_exams"] = df["previous_marks"]
+            modified = True
+            
+        if modified:
+            cols = [c for c in df.columns if c != "final_score"] + ["final_score"]
+            df = df[cols]
+            df.to_csv(CSV_PATH, index=False)
+            
+        return df
+    except Exception:
+        df = pd.DataFrame(DEFAULT_DATA)
+        df.to_csv(CSV_PATH, index=False)
+        return df
 
 
 # ── MLOps Registry & Validation Helpers ───────────────────────────────
@@ -79,6 +109,9 @@ def validate_student_data(data, is_predict=False):
         att = float(data.get('attendance'))
         pm = float(data.get('previous_marks'))
         ac = float(data.get('assignments_completed'))
+        sl = float(data.get('sleep_hours', 7.5))
+        lms = float(data.get('lms_logins', 30.0))
+        me = float(data.get('mock_exams', 70.0))
         
         if not (0 <= sh <= 12):
             return False, "Study Hours must be between 0 and 12."
@@ -88,6 +121,12 @@ def validate_student_data(data, is_predict=False):
             return False, "Previous Marks must be between 0 and 100."
         if not (0 <= ac <= 10):
             return False, "Assignments Completed must be between 0 and 10."
+        if not (0 <= sl <= 24):
+            return False, "Sleep Hours must be between 0 and 24."
+        if not (0 <= lms <= 300):
+            return False, "LMS Logins must be between 0 and 300."
+        if not (0 <= me <= 100):
+            return False, "Mock Exam Score must be between 0 and 100."
             
         if not is_predict:
             fs = float(data.get('final_score'))
@@ -245,6 +284,9 @@ def predict():
         attendance = float(data['attendance'])
         previous_marks = float(data['previous_marks'])
         assignments_completed = float(data['assignments_completed'])
+        sleep_hours = float(data.get('sleep_hours', 7.5))
+        lms_logins = float(data.get('lms_logins', 30.0))
+        mock_exams = float(data.get('mock_exams', 70.0))
 
         model, mae, r2, _, active_ver = get_model_and_stats()
 
@@ -252,7 +294,10 @@ def predict():
             "study_hours": [study_hours],
             "attendance": [attendance],
             "previous_marks": [previous_marks],
-            "assignments_completed": [assignments_completed]
+            "assignments_completed": [assignments_completed],
+            "sleep_hours": [sleep_hours],
+            "lms_logins": [lms_logins],
+            "mock_exams": [mock_exams]
         })
         student = add_features(student)
 
@@ -332,6 +377,9 @@ def add_student():
             "attendance": float(data['attendance']),
             "previous_marks": float(data['previous_marks']),
             "assignments_completed": float(data['assignments_completed']),
+            "sleep_hours": float(data.get('sleep_hours', 7.5)),
+            "lms_logins": float(data.get('lms_logins', 30.0)),
+            "mock_exams": float(data.get('mock_exams', 70.0)),
             "final_score": float(data['final_score'])
         }
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
@@ -470,6 +518,9 @@ def generate_advice():
         attendance = float(data.get('attendance', 80.0))
         previous_marks = float(data.get('previous_marks', 70.0))
         assignments_completed = float(data.get('assignments_completed', 6.0))
+        sleep_hours = float(data.get('sleep_hours', 7.5))
+        lms_logins = float(data.get('lms_logins', 30.0))
+        mock_exams = float(data.get('mock_exams', 70.0))
         predicted_score = float(data.get('predicted_score', 65.0))
 
         # Check if API Key is configured
@@ -487,7 +538,16 @@ def generate_advice():
                  else "Room for improvement. Adding 1-2 study hours daily could yield significant score increases.") + "\n"
                 f"*   **Assignments ({assignments_completed}/10)**: " + 
                 ("High completion! You are practicing and staying on track." if assignments_completed >= 8 
-                 else "Critical risk. Completing assignments builds practical skills. Aim for 9/10.") + "\n\n"
+                 else "Critical risk. Completing assignments builds practical skills. Aim for 9/10.") + "\n"
+                f"*   **Sleep & Wellness ({sleep_hours} hrs/day)**: " +
+                ("Adequate rest. Getting 7-8 hours of sleep protects memory retention." if sleep_hours >= 7
+                 else "Sleep deprivation risk. Sleep hours are low; prioritize wellness and sleep for learning retention.") + "\n"
+                f"*   **LMS Engagement ({lms_logins} logins/week)**: " +
+                ("Active digital participation! Excellent LMS login frequency." if lms_logins >= 25
+                 else "Low digital engagement. Try logging in daily to access learning resources.") + "\n"
+                f"*   **Mock Exams ({mock_exams}/100)**: " +
+                ("Strong quiz baseline. Good performance under mock constraints." if mock_exams >= 70
+                 else "Mock baseline is low. Focus on taking simulated prep tests to get comfortable with question formats.") + "\n\n"
                 "#### 2. Custom 4-Week Action Planner\n"
                 "*   **Week 1 (Establish Foundations)**: Allocate 45 minutes daily to review notes immediately after class. Focus on outstanding assignments.\n"
                 "*   **Week 2 (Target Weak Areas)**: Form a study group or attend office hours to address topics where previous marks were dropped.\n"
@@ -515,6 +575,9 @@ def generate_advice():
             f"- Class Attendance: {attendance}%\n"
             f"- Previous Exam Marks: {previous_marks}/100\n"
             f"- Assignments Completed: {assignments_completed}/10\n"
+            f"- Average Sleep Hours: {sleep_hours} hours/day\n"
+            f"- Weekly LMS Logins: {lms_logins}\n"
+            f"- Latest Mock Exam Score: {mock_exams}/100\n"
             f"- AI Predicted Final Exam Score: {predicted_score}/100\n\n"
             "Include these exact three sections, using headers:\n"
             "1. Strength & Risk Factor Analysis: Analyze their metrics. Compare parameters and point out major areas causing lower scores vs. areas keeping them afloat.\n"

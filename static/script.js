@@ -28,6 +28,9 @@ function bindSliders() {
     { id: 'attendance',           valId: 'val-attendance',  suffix: '%' },
     { id: 'previous_marks',       valId: 'val-marks',       suffix: '' },
     { id: 'assignments_completed',valId: 'val-assign',      suffix: '' },
+    { id: 'sleep_hours',          valId: 'val-sleep',       suffix: 'h' },
+    { id: 'lms_logins',           valId: 'val-lms',         suffix: '' },
+    { id: 'mock_exams',           valId: 'val-mock',        suffix: '' },
   ];
   map.forEach(({ id, valId, suffix }) => {
     const slider = document.getElementById(id);
@@ -61,6 +64,9 @@ async function runPrediction() {
     attendance:            parseFloat(document.getElementById('attendance').value),
     previous_marks:        parseFloat(document.getElementById('previous_marks').value),
     assignments_completed: parseFloat(document.getElementById('assignments_completed').value),
+    sleep_hours:           parseFloat(document.getElementById('sleep_hours').value),
+    lms_logins:            parseFloat(document.getElementById('lms_logins').value),
+    mock_exams:            parseFloat(document.getElementById('mock_exams').value),
   };
 
   try {
@@ -98,6 +104,9 @@ function showResult(data) {
     attendance:            parseFloat(document.getElementById('attendance').value),
     previous_marks:        parseFloat(document.getElementById('previous_marks').value),
     assignments_completed: parseFloat(document.getElementById('assignments_completed').value),
+    sleep_hours:           parseFloat(document.getElementById('sleep_hours').value),
+    lms_logins:            parseFloat(document.getElementById('lms_logins').value),
+    mock_exams:            parseFloat(document.getElementById('mock_exams').value),
     predicted_score:       score
   };
 
@@ -202,7 +211,7 @@ async function loadDataset() {
     if (data.success) renderTable(data.data);
   } catch (e) {
     document.getElementById('table-body').innerHTML =
-      '<tr><td colspan="7" class="loading-row">Failed to load data.</td></tr>';
+      '<tr><td colspan="10" class="loading-row">Failed to load data.</td></tr>';
   }
 }
 
@@ -210,7 +219,7 @@ function renderTable(rows) {
   document.getElementById('record-count').textContent = `${rows.length} student records`;
   const tbody = document.getElementById('table-body');
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="loading-row">No records yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="loading-row">No records yet.</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map((r, i) => `
@@ -220,6 +229,9 @@ function renderTable(rows) {
       <td>${r.attendance}%</td>
       <td>${r.previous_marks}</td>
       <td>${r.assignments_completed}/10</td>
+      <td>${r.sleep_hours || 7.5}h</td>
+      <td>${r.lms_logins || 30}</td>
+      <td>${r.mock_exams || r.previous_marks || 70}</td>
       <td class="score-cell">${r.final_score}</td>
       <td><button class="delete-btn" onclick="deleteStudent(${i})">🗑 Delete</button></td>
     </tr>
@@ -232,6 +244,9 @@ async function addStudent() {
     attendance:            parseFloat(document.getElementById('add-attendance').value),
     previous_marks:        parseFloat(document.getElementById('add-marks').value),
     assignments_completed: parseFloat(document.getElementById('add-assignments').value),
+    sleep_hours:           parseFloat(document.getElementById('add-sleep').value),
+    lms_logins:            parseFloat(document.getElementById('add-lms').value),
+    mock_exams:            parseFloat(document.getElementById('add-mock').value),
     final_score:           parseFloat(document.getElementById('add-score').value),
   };
 
@@ -299,6 +314,9 @@ const FEATURE_LABELS = {
   attendance:             'Attendance',
   previous_marks:         'Previous Marks',
   assignments_completed:  'Assignments Done',
+  sleep_hours:            'Average Sleep Hours',
+  lms_logins:             'Weekly LMS Logins',
+  mock_exams:             'Mock Exam Score',
   study_hours_attendance: 'Study-Attendance Interaction',
   study_hours_log:        'Study Efficiency Curve',
   assignment_marks_ratio: 'Assignment/Marks Ratio'

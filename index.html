@@ -102,6 +102,33 @@
               <div class="slider-marks"><span>0</span><span>5</span><span>10</span></div>
             </div>
 
+            <div class="field-group">
+              <div class="field-label">
+                <label for="sleep_hours">Average Sleep Hours</label>
+                <span class="field-value" id="val-sleep">8.0</span>
+              </div>
+              <input type="range" id="sleep_hours" min="3" max="12" step="0.5" value="8.0" class="slider" />
+              <div class="slider-marks"><span>3 hrs</span><span>7.5 hrs</span><span>12 hrs</span></div>
+            </div>
+
+            <div class="field-group">
+              <div class="field-label">
+                <label for="lms_logins">Weekly LMS Logins</label>
+                <span class="field-value" id="val-lms">30</span>
+              </div>
+              <input type="range" id="lms_logins" min="0" max="100" step="1" value="30" class="slider" />
+              <div class="slider-marks"><span>0</span><span>50</span><span>100</span></div>
+            </div>
+
+            <div class="field-group">
+              <div class="field-label">
+                <label for="mock_exams">Latest Mock Exam Score</label>
+                <span class="field-value" id="val-mock">70</span>
+              </div>
+              <input type="range" id="mock_exams" min="0" max="100" step="1" value="70" class="slider" />
+              <div class="slider-marks"><span>0</span><span>50</span><span>100</span></div>
+            </div>
+
           </div>
 
           <button class="predict-btn" id="predict-btn" onclick="runPrediction()">
@@ -214,9 +241,25 @@
                 <input type="number" id="add-assignments" min="0" max="10" value="7" placeholder="0–10" />
               </div>
             </div>
-            <div class="input-group full">
-              <label>Final Score (Actual)</label>
-              <input type="number" id="add-score" min="0" max="100" value="75" placeholder="0–100" />
+            <div class="input-row">
+              <div class="input-group">
+                <label>Sleep Hours</label>
+                <input type="number" id="add-sleep" min="0" max="24" step="0.5" value="7.5" placeholder="0–24" />
+              </div>
+              <div class="input-group">
+                <label>LMS Logins</label>
+                <input type="number" id="add-lms" min="0" max="300" value="30" placeholder="0–300" />
+              </div>
+            </div>
+            <div class="input-row">
+              <div class="input-group">
+                <label>Mock Exam Score</label>
+                <input type="number" id="add-mock" min="0" max="100" value="70" placeholder="0–100" />
+              </div>
+              <div class="input-group">
+                <label>Final Score (Actual)</label>
+                <input type="number" id="add-score" min="0" max="100" value="75" placeholder="0–100" />
+              </div>
             </div>
             <button class="add-btn" onclick="addStudent()">
               <span>Add Student Record</span>
@@ -243,12 +286,15 @@
                   <th>Attendance</th>
                   <th>Prev. Marks</th>
                   <th>Assignments</th>
+                  <th>Sleep</th>
+                  <th>LMS Logins</th>
+                  <th>Mock Exam</th>
                   <th>Final Score</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody id="table-body">
-                <tr><td colspan="7" class="loading-row">Loading data…</td></tr>
+                <tr><td colspan="10" class="loading-row">Loading data…</td></tr>
               </tbody>
             </table>
           </div>
