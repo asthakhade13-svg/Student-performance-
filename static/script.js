@@ -145,6 +145,34 @@ function showResult(data) {
     fb.textContent = 'Below average prediction. Focus on boosting attendance, study time, and assignment completion rate.';
   }
 
+  // SHAP Explanations
+  const shapList = document.getElementById('shap-list');
+  if (shapList && data.explanations) {
+    // Sort features by absolute impact (highest impact first)
+    const sorted = [...data.explanations].sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
+    
+    shapList.innerHTML = sorted.map(item => {
+      const label = FEATURE_LABELS[item.feature] || item.feature;
+      const impact = item.impact;
+      
+      let cssClass = 'neutral';
+      let signText = '';
+      if (impact > 0) {
+        cssClass = 'positive';
+        signText = '+';
+      } else if (impact < 0) {
+        cssClass = 'negative';
+      }
+      
+      return `
+        <div class="shap-item">
+          <span class="shap-feat-name">${label}</span>
+          <span class="shap-impact-val ${cssClass}">${signText}${impact.toFixed(2)}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
   // Trigger GSAP Sparkle Burst around the score ring
   const scoreCenter = document.querySelector('.score-center');
   if (scoreCenter) {

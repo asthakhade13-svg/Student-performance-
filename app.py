@@ -259,6 +259,25 @@ def predict():
         predicted_score = round(float(model.predict(student)[0]), 2)
         predicted_score = max(0, min(100, predicted_score))
 
+        # Calculate SHAP explanations
+        import shap
+        df = load_or_create_data()
+        processed_df = add_features(df)
+        X = processed_df.drop("final_score", axis=1)
+        
+        # Sample background for speed
+        background = shap.sample(X, min(10, len(X)), random_state=42)
+        predict_fn = lambda x: model.predict(pd.DataFrame(x, columns=X.columns))
+        explainer = shap.KernelExplainer(predict_fn, background)
+        shap_vals = explainer.shap_values(student)
+        
+        explanations = []
+        for col, val in zip(X.columns, shap_vals[0]):
+            explanations.append({
+                "feature": col,
+                "impact": round(float(val), 2)
+            })
+
         # Determine grade
         if predicted_score >= 90:
             grade, grade_class = "A+", "grade-aplus"
@@ -280,7 +299,8 @@ def predict():
             "grade_class": grade_class,
             "mae": mae,
             "r2": r2,
-            "active_version": active_ver
+            "active_version": active_ver,
+            "explanations": explanations
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
