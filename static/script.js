@@ -166,6 +166,35 @@ function showResult(data) {
       const label = FEATURE_LABELS[item.feature] || item.feature;
       const impact = item.impact;
       
+      // Get student's actual input score for this feature
+      let valueText = '';
+      if (item.feature === 'study_hours') {
+        valueText = ` (${document.getElementById('study_hours').value}h)`;
+      } else if (item.feature === 'attendance') {
+        valueText = ` (${document.getElementById('attendance').value}%)`;
+      } else if (item.feature === 'previous_marks') {
+        valueText = ` (${document.getElementById('previous_marks').value})`;
+      } else if (item.feature === 'assignments_completed') {
+        valueText = ` (${document.getElementById('assignments_completed').value}/10)`;
+      } else if (item.feature === 'sleep_hours') {
+        valueText = ` (${document.getElementById('sleep_hours').value}h)`;
+      } else if (item.feature === 'lms_logins') {
+        valueText = ` (${document.getElementById('lms_logins').value})`;
+      } else if (item.feature === 'mock_exams') {
+        valueText = ` (${document.getElementById('mock_exams').value})`;
+      } else if (item.feature === 'study_hours_attendance') {
+        const sh = parseFloat(document.getElementById('study_hours').value);
+        const att = parseFloat(document.getElementById('attendance').value);
+        valueText = ` (${(sh * att).toFixed(1)})`;
+      } else if (item.feature === 'study_hours_log') {
+        const sh = parseFloat(document.getElementById('study_hours').value);
+        valueText = ` (${Math.log1p(sh).toFixed(2)})`;
+      } else if (item.feature === 'assignment_marks_ratio') {
+        const ac = parseFloat(document.getElementById('assignments_completed').value);
+        const pm = parseFloat(document.getElementById('previous_marks').value);
+        valueText = ` (${(ac / (pm + 1.0)).toFixed(3)})`;
+      }
+      
       let cssClass = 'neutral';
       let signText = '';
       if (impact > 0) {
@@ -177,7 +206,7 @@ function showResult(data) {
       
       return `
         <div class="shap-item">
-          <span class="shap-feat-name">${label}</span>
+          <span class="shap-feat-name">${label}${valueText}</span>
           <span class="shap-impact-val ${cssClass}">${signText}${impact.toFixed(2)}</span>
         </div>
       `;
