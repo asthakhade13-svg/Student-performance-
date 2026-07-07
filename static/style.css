@@ -751,8 +751,7 @@ body {
 .shap-impact-val.neutral {
   color: #777;
   background: #eee;
+}.ai-advisor-card {
+  margin-top: 24px;
+  width: 100%;
 }
-
-
-
-

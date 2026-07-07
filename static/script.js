@@ -95,6 +95,8 @@ function showResult(data) {
   document.getElementById('result-placeholder').classList.add('hidden');
   const content = document.getElementById('result-content');
   content.classList.remove('hidden');
+  const advisorCard = document.getElementById('ai-advisor-card');
+  if (advisorCard) advisorCard.classList.remove('hidden');
 
   const score = data.predicted_score;
 

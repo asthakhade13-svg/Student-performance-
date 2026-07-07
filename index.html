@@ -174,31 +174,32 @@
             </div>
 
             <div class="feedback-box" id="feedback-box"></div>
-
-            <!-- AI Study Advisor Section -->
-            <div class="ai-advisor-section" id="ai-advisor-section">
-              <hr class="ai-divider" />
-              <div class="ai-header">
-                <span class="ai-icon"></span>
-                <h3>EduPredict AI Study Advisor</h3>
-              </div>
-              <p class="ai-description">Get a personalized, data-driven 4-week study planner and target daily habits based on your predicted performance.</p>
-              
-              <button class="add-btn ai-generate-btn" id="ai-generate-btn" onclick="generateAISuggestions()">
-                <span>Generate AI Coaching Plan</span>
-              </button>
-              
-              <div class="ai-content-area hidden" id="ai-content-area">
-                <div class="ai-loading-spinner hidden" id="ai-loading-spinner">
-                  <div class="spinner-ring"></div>
-                  <span>Consulting advisor models...</span>
-                </div>
-                <div class="ai-response-text" id="ai-response-text"></div>
-              </div>
-            </div>
           </div>
         </div>
 
+      </div>
+
+      <!-- AI Study Advisor Section (moved out of predict-grid, full width below it!) -->
+      <div class="card ai-advisor-card hidden" id="ai-advisor-card">
+        <div class="ai-advisor-section" id="ai-advisor-section">
+          <div class="ai-header">
+            <span class="ai-icon"></span>
+            <h3>EduPredict AI Study Advisor</h3>
+          </div>
+          <p class="ai-description">Get a personalized, data-driven 4-week study planner and target daily habits based on your predicted performance.</p>
+          
+          <button class="add-btn ai-generate-btn" id="ai-generate-btn" onclick="generateAISuggestions()">
+            <span>Generate AI Coaching Plan</span>
+          </button>
+          
+          <div class="ai-content-area hidden" id="ai-content-area">
+            <div class="ai-loading-spinner hidden" id="ai-loading-spinner">
+              <div class="spinner-ring"></div>
+              <span>Consulting advisor models...</span>
+            </div>
+            <div class="ai-response-text" id="ai-response-text"></div>
+          </div>
+        </div>
       </div>
     </section>
 
