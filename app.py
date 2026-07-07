@@ -45,14 +45,14 @@ def add_features(df):
 os.makedirs(MODELS_DIR, exist_ok=True)
 
 DEFAULT_DATA = {
-    "study_hours": [2.0, 4.0, 6.0, 8.0, 1.0, 5.0, 7.0, 3.0, 9.0, 4.0],
-    "attendance": [60.0, 75.0, 85.0, 90.0, 50.0, 80.0, 95.0, 65.0, 98.0, 70.0],
-    "previous_marks": [50.0, 65.0, 78.0, 88.0, 40.0, 70.0, 92.0, 55.0, 95.0, 60.0],
-    "assignments_completed": [4.0, 6.0, 8.0, 9.0, 2.0, 7.0, 10.0, 5.0, 10.0, 6.0],
-    "sleep_hours": [7.0, 6.5, 8.0, 7.5, 5.5, 8.0, 7.0, 7.5, 8.5, 6.0],
-    "lms_logins": [15, 25, 40, 45, 10, 30, 50, 20, 55, 28],
-    "mock_exams": [48.0, 68.0, 79.0, 87.0, 38.0, 74.0, 91.0, 58.0, 96.0, 62.0],
-    "final_score": [55.0, 68.0, 80.0, 92.0, 45.0, 75.0, 96.0, 60.0, 99.0, 65.0]
+    "study_hours": [2.0, 4.0, 6.0, 8.0, 1.0, 5.0, 7.0, 3.0, 9.0, 4.0, 5.0, 5.0, 5.0, 6.0, 3.0, 7.0, 4.0, 2.0],
+    "attendance": [60.0, 75.0, 85.0, 90.0, 50.0, 80.0, 95.0, 65.0, 98.0, 70.0, 80.0, 80.0, 85.0, 90.0, 75.0, 60.0, 80.0, 95.0],
+    "previous_marks": [50.0, 65.0, 78.0, 88.0, 40.0, 70.0, 92.0, 55.0, 95.0, 60.0, 70.0, 70.0, 72.0, 85.0, 60.0, 80.0, 65.0, 50.0],
+    "assignments_completed": [4.0, 6.0, 8.0, 9.0, 2.0, 7.0, 10.0, 5.0, 10.0, 6.0, 7.0, 7.0, 8.0, 9.0, 5.0, 6.0, 7.0, 4.0],
+    "sleep_hours": [7.0, 6.5, 8.0, 7.5, 5.5, 8.0, 7.0, 7.5, 8.5, 6.0, 7.5, 7.5, 4.0, 8.5, 7.5, 5.0, 8.0, 7.5],
+    "lms_logins": [15, 25, 40, 45, 10, 30, 50, 20, 55, 28, 30, 30, 12, 45, 80, 15, 35, 50],
+    "mock_exams": [48.0, 68.0, 79.0, 87.0, 38.0, 74.0, 91.0, 58.0, 96.0, 62.0, 70.0, 70.0, 55.0, 92.0, 85.0, 62.0, 75.0, 68.0],
+    "final_score": [55.0, 68.0, 80.0, 92.0, 45.0, 75.0, 96.0, 60.0, 99.0, 65.0, 75.0, 75.0, 62.0, 88.0, 73.0, 69.0, 76.0, 64.0]
 }
 
 
@@ -63,6 +63,12 @@ def load_or_create_data():
         return df
     try:
         df = pd.read_csv(CSV_PATH)
+        # Migrate 12-row dataset to richer 18-row dataset to trigger all feature importances
+        if len(df) <= 12:
+            df = pd.DataFrame(DEFAULT_DATA)
+            df.to_csv(CSV_PATH, index=False)
+            return df
+            
         modified = False
         if "sleep_hours" not in df.columns:
             df["sleep_hours"] = 7.5
@@ -157,12 +163,14 @@ def train_model(df):
         max_depth = trial.suggest_int('max_depth', 2, 7)
         learning_rate = trial.suggest_float('learning_rate', 0.01, 0.2, log=True)
         subsample = trial.suggest_float('subsample', 0.6, 1.0)
+        colsample_bytree = trial.suggest_float('colsample_bytree', 0.4, 0.8)
         
         model_trial = xgb.XGBRegressor(
             n_estimators=n_estimators,
             max_depth=max_depth,
             learning_rate=learning_rate,
             subsample=subsample,
+            colsample_bytree=colsample_bytree,
             random_state=42
         )
         
@@ -184,6 +192,7 @@ def train_model(df):
         max_depth=best_params['max_depth'],
         learning_rate=best_params['learning_rate'],
         subsample=best_params['subsample'],
+        colsample_bytree=best_params['colsample_bytree'],
         random_state=42
     )
     model.fit(X_train, y_train)
