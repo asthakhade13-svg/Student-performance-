@@ -61,72 +61,89 @@
         <div class="card form-card">
           <div class="card-header">
             <h2>Student Parameters</h2>
-            <p>Adjust values using sliders or type directly</p>
+            <p>Adjust baseline values and complete the 4-week learning log</p>
           </div>
 
           <div class="form-fields">
 
-            <div class="field-group">
-              <div class="field-label">
-                <label for="study_hours">Study Hours / Day</label>
-                <span class="field-value" id="val-study">6</span>
+            <!-- Static Academic Baseline -->
+            <div class="baseline-section">
+              <h3 class="section-subtitle">Academic Baseline</h3>
+              
+              <div class="field-group">
+                <div class="field-label">
+                  <label for="attendance">Attendance (%)</label>
+                  <span class="field-value" id="val-attendance">85</span>
+                </div>
+                <input type="range" id="attendance" min="0" max="100" step="1" value="85" class="slider" />
+                <div class="slider-marks"><span>0%</span><span>50%</span><span>100%</span></div>
               </div>
-              <input type="range" id="study_hours" min="0" max="12" step="0.5" value="6" class="slider" />
-              <div class="slider-marks"><span>0h</span><span>6h</span><span>12h</span></div>
+
+              <div class="field-group">
+                <div class="field-label">
+                  <label for="previous_marks">Previous Exam Marks</label>
+                  <span class="field-value" id="val-marks">75</span>
+                </div>
+                <input type="range" id="previous_marks" min="0" max="100" step="1" value="75" class="slider" />
+                <div class="slider-marks"><span>0</span><span>50</span><span>100</span></div>
+              </div>
             </div>
 
-            <div class="field-group">
-              <div class="field-label">
-                <label for="attendance">Attendance (%)</label>
-                <span class="field-value" id="val-attendance">85</span>
+            <!-- Weekly Learning Logs Time-Series -->
+            <div class="weekly-logs-section">
+              <h3 class="section-subtitle">Weekly Learning Logs</h3>
+              <div class="weekly-table-wrapper">
+                <table class="weekly-table">
+                  <thead>
+                    <tr>
+                      <th>Week</th>
+                      <th>Study Hrs / Day</th>
+                      <th>Sleep Hrs / Day</th>
+                      <th>LMS Logins</th>
+                      <th>Assignments</th>
+                      <th>Mock Score</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <!-- Row W1 -->
+                    <tr>
+                      <td class="week-cell">Week 1</td>
+                      <td><input type="number" id="study_hours_w1" min="0" max="12" step="0.5" value="4.5" class="table-input" /></td>
+                      <td><input type="number" id="sleep_hours_w1" min="3" max="12" step="0.5" value="7.5" class="table-input" /></td>
+                      <td><input type="number" id="lms_logins_w1" min="0" max="100" step="1" value="20" class="table-input" /></td>
+                      <td><input type="number" id="assignments_completed_w1" min="0" max="10" step="1" value="2" class="table-input" /></td>
+                      <td><input type="number" id="mock_exams_w1" min="0" max="100" step="1" value="65" class="table-input" /></td>
+                    </tr>
+                    <!-- Row W2 -->
+                    <tr>
+                      <td class="week-cell">Week 2</td>
+                      <td><input type="number" id="study_hours_w2" min="0" max="12" step="0.5" value="5.0" class="table-input" /></td>
+                      <td><input type="number" id="sleep_hours_w2" min="3" max="12" step="0.5" value="7.5" class="table-input" /></td>
+                      <td><input type="number" id="lms_logins_w2" min="0" max="100" step="1" value="25" class="table-input" /></td>
+                      <td><input type="number" id="assignments_completed_w2" min="0" max="10" step="1" value="4" class="table-input" /></td>
+                      <td><input type="number" id="mock_exams_w2" min="0" max="100" step="1" value="70" class="table-input" /></td>
+                    </tr>
+                    <!-- Row W3 -->
+                    <tr>
+                      <td class="week-cell">Week 3</td>
+                      <td><input type="number" id="study_hours_w3" min="0" max="12" step="0.5" value="6.0" class="table-input" /></td>
+                      <td><input type="number" id="sleep_hours_w3" min="3" max="12" step="0.5" value="7.0" class="table-input" /></td>
+                      <td><input type="number" id="lms_logins_w3" min="0" max="100" step="1" value="30" class="table-input" /></td>
+                      <td><input type="number" id="assignments_completed_w3" min="0" max="10" step="1" value="6" class="table-input" /></td>
+                      <td><input type="number" id="mock_exams_w3" min="0" max="100" step="1" value="72" class="table-input" /></td>
+                    </tr>
+                    <!-- Row W4 -->
+                    <tr>
+                      <td class="week-cell">Week 4</td>
+                      <td><input type="number" id="study_hours_w4" min="0" max="12" step="0.5" value="6.5" class="table-input" /></td>
+                      <td><input type="number" id="sleep_hours_w4" min="3" max="12" step="0.5" value="6.5" class="table-input" /></td>
+                      <td><input type="number" id="lms_logins_w4" min="0" max="100" step="1" value="35" class="table-input" /></td>
+                      <td><input type="number" id="assignments_completed_w4" min="0" max="10" step="1" value="8" class="table-input" /></td>
+                      <td><input type="number" id="mock_exams_w4" min="0" max="100" step="1" value="75" class="table-input" /></td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-              <input type="range" id="attendance" min="0" max="100" step="1" value="85" class="slider" />
-              <div class="slider-marks"><span>0%</span><span>50%</span><span>100%</span></div>
-            </div>
-
-            <div class="field-group">
-              <div class="field-label">
-                <label for="previous_marks">Previous Marks</label>
-                <span class="field-value" id="val-marks">75</span>
-              </div>
-              <input type="range" id="previous_marks" min="0" max="100" step="1" value="75" class="slider" />
-              <div class="slider-marks"><span>0</span><span>50</span><span>100</span></div>
-            </div>
-
-            <div class="field-group">
-              <div class="field-label">
-                <label for="assignments_completed">Assignments Completed</label>
-                <span class="field-value" id="val-assign">8</span>
-              </div>
-              <input type="range" id="assignments_completed" min="0" max="10" step="1" value="8" class="slider" />
-              <div class="slider-marks"><span>0</span><span>5</span><span>10</span></div>
-            </div>
-
-            <div class="field-group">
-              <div class="field-label">
-                <label for="sleep_hours">Average Sleep Hours</label>
-                <span class="field-value" id="val-sleep">8.0</span>
-              </div>
-              <input type="range" id="sleep_hours" min="3" max="12" step="0.5" value="8.0" class="slider" />
-              <div class="slider-marks"><span>3 hrs</span><span>7.5 hrs</span><span>12 hrs</span></div>
-            </div>
-
-            <div class="field-group">
-              <div class="field-label">
-                <label for="lms_logins">Weekly LMS Logins</label>
-                <span class="field-value" id="val-lms">30</span>
-              </div>
-              <input type="range" id="lms_logins" min="0" max="100" step="1" value="30" class="slider" />
-              <div class="slider-marks"><span>0</span><span>50</span><span>100</span></div>
-            </div>
-
-            <div class="field-group">
-              <div class="field-label">
-                <label for="mock_exams">Latest Mock Exam Score</label>
-                <span class="field-value" id="val-mock">70</span>
-              </div>
-              <input type="range" id="mock_exams" min="0" max="100" step="1" value="70" class="slider" />
-              <div class="slider-marks"><span>0</span><span>50</span><span>100</span></div>
             </div>
 
           </div>

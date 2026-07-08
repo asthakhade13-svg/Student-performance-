@@ -60,14 +60,16 @@ async function runPrediction() {
   btn.querySelector('span:last-child').textContent = 'Predicting…';
 
   const payload = {
-    study_hours:           parseFloat(document.getElementById('study_hours').value),
-    attendance:            parseFloat(document.getElementById('attendance').value),
-    previous_marks:        parseFloat(document.getElementById('previous_marks').value),
-    assignments_completed: parseFloat(document.getElementById('assignments_completed').value),
-    sleep_hours:           parseFloat(document.getElementById('sleep_hours').value),
-    lms_logins:            parseFloat(document.getElementById('lms_logins').value),
-    mock_exams:            parseFloat(document.getElementById('mock_exams').value),
+    attendance:     parseFloat(document.getElementById('attendance').value),
+    previous_marks: parseFloat(document.getElementById('previous_marks').value)
   };
+  for (let w = 1; w <= 4; w++) {
+    payload[`study_hours_w${w}`] =           parseFloat(document.getElementById(`study_hours_w${w}`).value) || 0;
+    payload[`sleep_hours_w${w}`] =           parseFloat(document.getElementById(`sleep_hours_w${w}`).value) || 0;
+    payload[`lms_logins_w${w}`] =            parseFloat(document.getElementById(`lms_logins_w${w}`).value) || 0;
+    payload[`assignments_completed_w${w}`] = parseFloat(document.getElementById(`assignments_completed_w${w}`).value) || 0;
+    payload[`mock_exams_w${w}`] =            parseFloat(document.getElementById(`mock_exams_w${w}`).value) || 0;
+  }
 
   try {
     const res  = await fetch('/api/predict', {
@@ -101,14 +103,23 @@ function showResult(data) {
   const score = data.predicted_score;
 
   // Save prediction details for AI Advisor
+  let sumStudy = 0, sumSleep = 0, sumLms = 0, sumAssign = 0, sumMock = 0;
+  for (let w = 1; w <= 4; w++) {
+    sumStudy +=  parseFloat(document.getElementById(`study_hours_w${w}`).value) || 0;
+    sumSleep +=  parseFloat(document.getElementById(`sleep_hours_w${w}`).value) || 0;
+    sumLms +=    parseFloat(document.getElementById(`lms_logins_w${w}`).value) || 0;
+    sumAssign += parseFloat(document.getElementById(`assignments_completed_w${w}`).value) || 0;
+    sumMock +=   parseFloat(document.getElementById(`mock_exams_w${w}`).value) || 0;
+  }
+
   lastPredictionPayload = {
-    study_hours:           parseFloat(document.getElementById('study_hours').value),
+    study_hours:           parseFloat((sumStudy / 4).toFixed(1)),
     attendance:            parseFloat(document.getElementById('attendance').value),
     previous_marks:        parseFloat(document.getElementById('previous_marks').value),
-    assignments_completed: parseFloat(document.getElementById('assignments_completed').value),
-    sleep_hours:           parseFloat(document.getElementById('sleep_hours').value),
-    lms_logins:            parseFloat(document.getElementById('lms_logins').value),
-    mock_exams:            parseFloat(document.getElementById('mock_exams').value),
+    assignments_completed: parseFloat((sumAssign / 4).toFixed(1)),
+    sleep_hours:           parseFloat((sumSleep / 4).toFixed(1)),
+    lms_logins:            parseFloat((sumLms / 4).toFixed(1)),
+    mock_exams:            parseFloat((sumMock / 4).toFixed(1)),
     predicted_score:       score
   };
 
@@ -168,31 +179,14 @@ function showResult(data) {
       
       // Get student's actual input score for this feature
       let valueText = '';
-      if (item.feature === 'study_hours') {
-        valueText = ` (${document.getElementById('study_hours').value}h)`;
-      } else if (item.feature === 'attendance') {
-        valueText = ` (${document.getElementById('attendance').value}%)`;
-      } else if (item.feature === 'previous_marks') {
-        valueText = ` (${document.getElementById('previous_marks').value})`;
-      } else if (item.feature === 'assignments_completed') {
-        valueText = ` (${document.getElementById('assignments_completed').value}/10)`;
-      } else if (item.feature === 'sleep_hours') {
-        valueText = ` (${document.getElementById('sleep_hours').value}h)`;
-      } else if (item.feature === 'lms_logins') {
-        valueText = ` (${document.getElementById('lms_logins').value})`;
-      } else if (item.feature === 'mock_exams') {
-        valueText = ` (${document.getElementById('mock_exams').value})`;
-      } else if (item.feature === 'study_hours_attendance') {
-        const sh = parseFloat(document.getElementById('study_hours').value);
-        const att = parseFloat(document.getElementById('attendance').value);
-        valueText = ` (${(sh * att).toFixed(1)})`;
-      } else if (item.feature === 'study_hours_log') {
-        const sh = parseFloat(document.getElementById('study_hours').value);
-        valueText = ` (${Math.log1p(sh).toFixed(2)})`;
-      } else if (item.feature === 'assignment_marks_ratio') {
-        const ac = parseFloat(document.getElementById('assignments_completed').value);
-        const pm = parseFloat(document.getElementById('previous_marks').value);
-        valueText = ` (${(ac / (pm + 1.0)).toFixed(3)})`;
+      const inputEl = document.getElementById(item.feature);
+      if (inputEl) {
+        let suffix = '';
+        if (item.feature === 'attendance') suffix = '%';
+        else if (item.feature.startsWith('study_hours')) suffix = 'h';
+        else if (item.feature.startsWith('sleep_hours')) suffix = 'h';
+        else if (item.feature.startsWith('assignments_completed')) suffix = '/10';
+        valueText = ` (${inputEl.value}${suffix})`;
       }
       
       let cssClass = 'neutral';
@@ -341,17 +335,16 @@ async function loadInsights() {
 }
 
 const FEATURE_LABELS = {
-  study_hours:            'Study Hours',
   attendance:             'Attendance',
-  previous_marks:         'Previous Marks',
-  assignments_completed:  'Assignments Done',
-  sleep_hours:            'Average Sleep Hours',
-  lms_logins:             'Weekly LMS Logins',
-  mock_exams:             'Mock Exam Score',
-  study_hours_attendance: 'Study-Attendance Interaction',
-  study_hours_log:        'Study Efficiency Curve',
-  assignment_marks_ratio: 'Assignment/Marks Ratio'
+  previous_marks:         'Previous Marks'
 };
+for (let w = 1; w <= 4; w++) {
+  FEATURE_LABELS[`study_hours_w${w}`] =           `Week ${w} Study Hours`;
+  FEATURE_LABELS[`sleep_hours_w${w}`] =           `Week ${w} Sleep Hours`;
+  FEATURE_LABELS[`lms_logins_w${w}`] =            `Week ${w} LMS Logins`;
+  FEATURE_LABELS[`assignments_completed_w${w}`] = `Week ${w} Assignments`;
+  FEATURE_LABELS[`mock_exams_w${w}`] =            `Week ${w} Mock Score`;
+}
 
 function renderInsights(data) {
   document.getElementById('ins-students').textContent = data.total_students;

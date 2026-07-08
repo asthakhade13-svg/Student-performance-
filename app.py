@@ -8,8 +8,10 @@ from datetime import datetime
 import google.generativeai as genai
 import optuna
 from sklearn.model_selection import train_test_split, cross_val_score
-import xgboost as xgb
 from sklearn.metrics import mean_absolute_error, r2_score
+import torch
+import torch.nn as nn
+from models.lstm_model import train_pytorch_model, StudentLSTMRegressor, get_seq_and_static_data
 
 app = Flask(__name__, static_folder='static')
 
@@ -24,70 +26,62 @@ REGISTRY_PATH = os.path.join(MODELS_DIR, 'registry.json')
 CSV_PATH = os.path.join(BASE_DIR, 'student_data.csv')
 
 # Feature Engineering Helpers
-FEATURE_COLS = [
-    "study_hours", "attendance", "previous_marks", "assignments_completed", 
-    "sleep_hours", "lms_logins", "mock_exams",
-    "study_hours_attendance", "study_hours_log", "assignment_marks_ratio"
-]
+FEATURE_COLS = ["attendance", "previous_marks"]
+for w in range(1, 5):
+    FEATURE_COLS.extend([
+        f"study_hours_w{w}",
+        f"sleep_hours_w{w}",
+        f"lms_logins_w{w}",
+        f"assignments_completed_w{w}",
+        f"mock_exams_w{w}"
+    ])
 
 def add_features(df):
-    df = df.copy()
-    # 1. Interaction Feature
-    df["study_hours_attendance"] = df["study_hours"] * df["attendance"]
-    # 2. Non-linear Transform (log scale)
-    df["study_hours_log"] = np.log1p(df["study_hours"])
-    # 3. Ratio Metric
-    df["assignment_marks_ratio"] = df["assignments_completed"] / (df["previous_marks"] + 1.0)
     return df
 
 
 # Ensure models dir exists
 os.makedirs(MODELS_DIR, exist_ok=True)
 
-DEFAULT_DATA = {
-    "study_hours": [2.0, 4.0, 6.0, 8.0, 1.0, 5.0, 7.0, 3.0, 9.0, 4.0, 5.0, 5.0, 5.0, 6.0, 3.0, 7.0, 4.0, 2.0],
-    "attendance": [60.0, 75.0, 85.0, 90.0, 50.0, 80.0, 95.0, 65.0, 98.0, 70.0, 80.0, 80.0, 85.0, 90.0, 75.0, 60.0, 80.0, 95.0],
-    "previous_marks": [50.0, 65.0, 78.0, 88.0, 40.0, 70.0, 92.0, 55.0, 95.0, 60.0, 70.0, 70.0, 72.0, 85.0, 60.0, 80.0, 65.0, 50.0],
-    "assignments_completed": [4.0, 6.0, 8.0, 9.0, 2.0, 7.0, 10.0, 5.0, 10.0, 6.0, 7.0, 7.0, 8.0, 9.0, 5.0, 6.0, 7.0, 4.0],
-    "sleep_hours": [7.0, 6.5, 8.0, 7.5, 5.5, 8.0, 7.0, 7.5, 8.5, 6.0, 7.5, 7.5, 4.0, 8.5, 7.5, 5.0, 8.0, 7.5],
-    "lms_logins": [15, 25, 40, 45, 10, 30, 50, 20, 55, 28, 30, 30, 12, 45, 80, 15, 35, 50],
-    "mock_exams": [48.0, 68.0, 79.0, 87.0, 38.0, 74.0, 91.0, 58.0, 96.0, 62.0, 70.0, 70.0, 55.0, 92.0, 85.0, 62.0, 75.0, 68.0],
-    "final_score": [55.0, 68.0, 80.0, 92.0, 45.0, 75.0, 96.0, 60.0, 99.0, 65.0, 75.0, 75.0, 62.0, 88.0, 73.0, 69.0, 76.0, 64.0]
-}
-
+def generate_default_sequence_data():
+    attendance = [60.0, 75.0, 85.0, 90.0, 50.0, 80.0, 95.0, 65.0, 98.0, 70.0, 80.0, 80.0, 85.0, 90.0, 75.0, 60.0, 80.0, 95.0]
+    previous_marks = [50.0, 65.0, 78.0, 88.0, 40.0, 70.0, 92.0, 55.0, 95.0, 60.0, 70.0, 70.0, 72.0, 85.0, 60.0, 80.0, 65.0, 50.0]
+    final_score = [55.0, 68.0, 80.0, 92.0, 45.0, 75.0, 96.0, 60.0, 99.0, 65.0, 75.0, 75.0, 62.0, 88.0, 73.0, 69.0, 76.0, 64.0]
+    
+    study_base = [2.0, 4.0, 6.0, 8.0, 1.0, 5.0, 7.0, 3.0, 9.0, 4.0, 5.0, 5.0, 5.0, 6.0, 3.0, 7.0, 4.0, 2.0]
+    sleep_base = [7.0, 6.5, 8.0, 7.5, 5.5, 8.0, 7.0, 7.5, 8.5, 6.0, 7.5, 7.5, 4.0, 8.5, 7.5, 5.0, 8.0, 7.5]
+    lms_base = [15, 25, 40, 45, 10, 30, 50, 20, 55, 28, 30, 30, 12, 45, 80, 15, 35, 50]
+    assign_base = [4, 6, 8, 9, 2, 7, 10, 5, 10, 6, 7, 7, 8, 9, 5, 6, 7, 4]
+    mock_base = [48.0, 68.0, 79.0, 87.0, 38.0, 74.0, 91.0, 58.0, 96.0, 62.0, 70.0, 70.0, 55.0, 92.0, 85.0, 62.0, 75.0, 68.0]
+    
+    data = {
+        "attendance": attendance,
+        "previous_marks": previous_marks
+    }
+    
+    for w in range(1, 5):
+        data[f"study_hours_w{w}"] = [round(max(0.0, min(12.0, b * (0.85 + 0.05 * w))), 1) for b in study_base]
+        data[f"sleep_hours_w{w}"] = [round(max(3.0, min(12.0, b * (1.02 - 0.02 * w))), 1) for b in sleep_base]
+        data[f"lms_logins_w{w}"] = [int(max(0, b * (0.95 + 0.03 * w))) for b in lms_base]
+        data[f"assignments_completed_w{w}"] = [int(max(0, min(10, b * (w / 4.0)))) for b in assign_base]
+        data[f"mock_exams_w{w}"] = [round(max(0.0, min(100.0, b * (0.95 + 0.02 * w))), 1) for b in mock_base]
+        
+    data["final_score"] = final_score
+    return data
 
 def load_or_create_data():
     if not os.path.exists(CSV_PATH):
-        df = pd.DataFrame(DEFAULT_DATA)
+        df = pd.DataFrame(generate_default_sequence_data())
         df.to_csv(CSV_PATH, index=False)
         return df
     try:
         df = pd.read_csv(CSV_PATH)
-        # Migrate 12-row dataset to richer 18-row dataset to trigger all feature importances
-        if len(df) <= 12:
-            df = pd.DataFrame(DEFAULT_DATA)
+        if "study_hours_w1" not in df.columns:
+            df = pd.DataFrame(generate_default_sequence_data())
             df.to_csv(CSV_PATH, index=False)
-            return df
-            
-        modified = False
-        if "sleep_hours" not in df.columns:
-            df["sleep_hours"] = 7.5
-            modified = True
-        if "lms_logins" not in df.columns:
-            df["lms_logins"] = 30.0
-            modified = True
-        if "mock_exams" not in df.columns:
-            df["mock_exams"] = df["previous_marks"]
-            modified = True
-            
-        if modified:
-            cols = [c for c in df.columns if c != "final_score"] + ["final_score"]
-            df = df[cols]
-            df.to_csv(CSV_PATH, index=False)
-            
         return df
     except Exception:
-        df = pd.DataFrame(DEFAULT_DATA)
+        df = pd.DataFrame(generate_default_sequence_data())
         df.to_csv(CSV_PATH, index=False)
         return df
 
@@ -111,131 +105,63 @@ def save_registry(registry):
 
 def validate_student_data(data, is_predict=False):
     try:
-        sh = float(data.get('study_hours'))
         att = float(data.get('attendance'))
         pm = float(data.get('previous_marks'))
-        ac = float(data.get('assignments_completed'))
-        sl = float(data.get('sleep_hours', 7.5))
-        lms = float(data.get('lms_logins', 30.0))
-        me = float(data.get('mock_exams', 70.0))
-        
-        if not (0 <= sh <= 12):
-            return False, "Study Hours must be between 0 and 12."
         if not (0 <= att <= 100):
             return False, "Attendance must be between 0 and 100%."
         if not (0 <= pm <= 100):
             return False, "Previous Marks must be between 0 and 100."
-        if not (0 <= ac <= 10):
-            return False, "Assignments Completed must be between 0 and 10."
-        if not (0 <= sl <= 24):
-            return False, "Sleep Hours must be between 0 and 24."
-        if not (0 <= lms <= 300):
-            return False, "LMS Logins must be between 0 and 300."
-        if not (0 <= me <= 100):
-            return False, "Mock Exam Score must be between 0 and 100."
             
+        for w in range(1, 5):
+            sh = float(data.get(f'study_hours_w{w}'))
+            sl = float(data.get(f'sleep_hours_w{w}'))
+            lms = float(data.get(f'lms_logins_w{w}'))
+            ac = float(data.get(f'assignments_completed_w{w}'))
+            me = float(data.get(f'mock_exams_w{w}'))
+            
+            if not (0 <= sh <= 12):
+                return False, f"Week {w} Study Hours must be between 0 and 12."
+            if not (0 <= sl <= 24):
+                return False, f"Week {w} Sleep Hours must be between 0 and 24."
+            if not (0 <= lms <= 300):
+                return False, f"Week {w} LMS Logins must be between 0 and 300."
+            if not (0 <= ac <= 10):
+                return False, f"Week {w} Assignments Completed must be between 0 and 10."
+            if not (0 <= me <= 100):
+                return False, f"Week {w} Mock Exam Score must be between 0 and 100."
+                
         if not is_predict:
             fs = float(data.get('final_score'))
             if not (0 <= fs <= 100):
                 return False, "Final Score must be between 0 and 100."
                 
         return True, None
-    except (ValueError, TypeError):
-        return False, "Input values must be numeric and not empty."
+    except (ValueError, TypeError, KeyError) as e:
+        return False, f"Input values must be numeric and not empty."
 
 
 def train_model(df):
-    processed_df = add_features(df)
-    X = processed_df.drop("final_score", axis=1)
-    y = processed_df["final_score"]
-    
-    # Train-test split (adjust test_size if dataset is too small)
-    if len(df) >= 5:
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    else:
-        X_train, X_test, y_train, y_test = X, X, y, y
-        
-    # Optuna Hyperparameter Optimization
-    optuna.logging.set_verbosity(optuna.logging.WARNING)
-    
-    def objective(trial):
-        n_estimators = trial.suggest_int('n_estimators', 50, 250)
-        max_depth = trial.suggest_int('max_depth', 2, 7)
-        learning_rate = trial.suggest_float('learning_rate', 0.01, 0.2, log=True)
-        subsample = trial.suggest_float('subsample', 0.6, 1.0)
-        colsample_bytree = trial.suggest_float('colsample_bytree', 0.4, 0.8)
-        
-        model_trial = xgb.XGBRegressor(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            learning_rate=learning_rate,
-            subsample=subsample,
-            colsample_bytree=colsample_bytree,
-            random_state=42
-        )
-        
-        cv = min(5, len(X_train))
-        if cv < 2:
-            model_trial.fit(X_train, y_train)
-            preds_train = model_trial.predict(X_train)
-            return mean_absolute_error(y_train, preds_train)
-            
-        scores = cross_val_score(model_trial, X_train, y_train, cv=cv, scoring='neg_mean_absolute_error')
-        return -scores.mean()
-        
-    study = optuna.create_study(direction='minimize')
-    study.optimize(objective, n_trials=30)
-    best_params = study.best_params
-    
-    model = xgb.XGBRegressor(
-        n_estimators=best_params['n_estimators'],
-        max_depth=best_params['max_depth'],
-        learning_rate=best_params['learning_rate'],
-        subsample=best_params['subsample'],
-        colsample_bytree=best_params['colsample_bytree'],
-        random_state=42
-    )
-    model.fit(X_train, y_train)
-    
-    # K-Fold Cross-Validation Evaluation
-    cv = min(5, len(df))
-    if cv >= 2:
-        cv_mae_scores = cross_val_score(model, X, y, cv=cv, scoring='neg_mean_absolute_error')
-        mae_mean = round(float(-cv_mae_scores.mean()), 2)
-        mae_std = round(float(cv_mae_scores.std()), 2)
-        
-        cv_r2_scores = cross_val_score(model, X, y, cv=cv, scoring='r2')
-        r2_mean = round(float(cv_r2_scores.mean()), 2)
-        r2_mean = max(-1.0, r2_mean)
-    else:
-        preds = model.predict(X_test)
-        mae_mean = round(float(mean_absolute_error(y_test, preds)), 2)
-        mae_std = 0.0
-        r2_mean = round(float(r2_score(y_test, preds)), 2)
-        r2_mean = max(-1.0, r2_mean)
-    
-    # Registering model
     registry = load_registry()
     next_ver_num = len(registry.get("history", [])) + 1
     version = f"v{next_ver_num}"
     
-    model_filename = f"model_{version}.pkl"
+    model_filename = f"model_{version}.pth"
     model_filepath = os.path.join(MODELS_DIR, model_filename)
-    joblib.dump(model, model_filepath)
+    
+    mae_mean, mae_std, r2_mean = train_pytorch_model(df, model_filepath)
     
     entry = {
         "version": version,
         "path": model_filepath,
-        "r2": r2_mean,
-        "mae": mae_mean,
-        "mae_std": mae_std,
+        "r2": round(float(r2_mean), 2),
+        "mae": round(float(mae_mean), 2),
+        "mae_std": round(float(mae_std), 2),
         "data_size": len(df),
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     registry["history"].append(entry)
     registry["active_version"] = version
     
-    # Prune old files: Keep last 5 versions in files, but keep history in registry.json
     if len(registry["history"]) > 5:
         for run in registry["history"][:-5]:
             old_path = run.get("path")
@@ -246,7 +172,7 @@ def train_model(df):
                     pass
                     
     save_registry(registry)
-    return model, mae_mean, r2_mean, X.columns.tolist(), version
+    return None, mae_mean, r2_mean, FEATURE_COLS, version
 
 
 def get_model_and_stats():
@@ -258,13 +184,17 @@ def get_model_and_stats():
         model_entry = next((item for item in registry["history"] if item["version"] == active_ver), None)
         if model_entry and os.path.exists(model_entry["path"]):
             try:
-                model = joblib.load(model_entry["path"])
-                return model, model_entry["mae"], model_entry["r2"], FEATURE_COLS, active_ver
-            except Exception:
-                pass
+                payload = joblib.load(model_entry["path"])
+                model = StudentLSTMRegressor()
+                model.load_state_dict(payload["model_state"])
+                model.eval()
+                return model, payload["scaler_seq"], payload["scaler_static"], model_entry["mae"], model_entry["r2"], active_ver
+            except Exception as e:
+                print("Error loading model:", e)
                 
     # If loading active model fails, trigger training
-    return train_model(df)
+    train_model(df)
+    return get_model_and_stats()
 
 
 # ── Routes ──────────────────────────────────────────────────────────────
@@ -289,44 +219,65 @@ def predict():
         if not is_valid:
             return jsonify({"success": False, "error": err_msg}), 400
             
-        study_hours = float(data['study_hours'])
         attendance = float(data['attendance'])
         previous_marks = float(data['previous_marks'])
-        assignments_completed = float(data['assignments_completed'])
-        sleep_hours = float(data.get('sleep_hours', 7.5))
-        lms_logins = float(data.get('lms_logins', 30.0))
-        mock_exams = float(data.get('mock_exams', 70.0))
-
-        model, mae, r2, _, active_ver = get_model_and_stats()
-
-        student = pd.DataFrame({
-            "study_hours": [study_hours],
+        
+        model, scaler_seq, scaler_static, mae, r2, active_ver = get_model_and_stats()
+        
+        student_data_dict = {
             "attendance": [attendance],
-            "previous_marks": [previous_marks],
-            "assignments_completed": [assignments_completed],
-            "sleep_hours": [sleep_hours],
-            "lms_logins": [lms_logins],
-            "mock_exams": [mock_exams]
-        })
-        student = add_features(student)
-
-        predicted_score = round(float(model.predict(student)[0]), 2)
-        predicted_score = max(0, min(100, predicted_score))
-
+            "previous_marks": [previous_marks]
+        }
+        for w in range(1, 5):
+            student_data_dict[f"study_hours_w{w}"] = [float(data[f"study_hours_w{w}"])]
+            student_data_dict[f"sleep_hours_w{w}"] = [float(data[f"sleep_hours_w{w}"])]
+            student_data_dict[f"lms_logins_w{w}"] = [float(data[f"lms_logins_w{w}"])]
+            student_data_dict[f"assignments_completed_w{w}"] = [float(data[f"assignments_completed_w{w}"])]
+            student_data_dict[f"mock_exams_w{w}"] = [float(data[f"mock_exams_w{w}"])]
+            
+        student_df = pd.DataFrame(student_data_dict)
+        student_df = student_df[FEATURE_COLS]
+        
+        seq_val, static_val, _ = get_seq_and_static_data(student_df)
+        N_val, T_val, F_val = seq_val.shape
+        seq_val_flat = seq_val.reshape(-1, F_val)
+        seq_val_scaled = scaler_seq.transform(seq_val_flat).reshape(N_val, T_val, F_val)
+        static_val_scaled = scaler_static.transform(static_val)
+        
+        with torch.no_grad():
+            pred = model(
+                torch.tensor(seq_val_scaled, dtype=torch.float32),
+                torch.tensor(static_val_scaled, dtype=torch.float32)
+            ).numpy()
+            predicted_score = round(float(pred[0][0]), 2)
+            predicted_score = max(0.0, min(100.0, predicted_score))
+            
         # Calculate SHAP explanations
         import shap
         df = load_or_create_data()
-        processed_df = add_features(df)
-        X = processed_df.drop("final_score", axis=1)
+        X_all = df[FEATURE_COLS]
         
-        # Sample background for speed
-        background = shap.sample(X, min(10, len(X)), random_state=42)
-        predict_fn = lambda x: model.predict(pd.DataFrame(x, columns=X.columns))
-        explainer = shap.KernelExplainer(predict_fn, background)
-        shap_vals = explainer.shap_values(student)
+        def shap_predict_fn(X_np):
+            df_temp = pd.DataFrame(X_np, columns=FEATURE_COLS)
+            seq, stat, _ = get_seq_and_static_data(df_temp)
+            N_t, T_t, F_t = seq.shape
+            seq_flat_t = seq.reshape(-1, F_t)
+            seq_scaled = scaler_seq.transform(seq_flat_t).reshape(N_t, T_t, F_t)
+            stat_scaled = scaler_static.transform(stat)
+            
+            with torch.no_grad():
+                preds_tensor = model(
+                    torch.tensor(seq_scaled, dtype=torch.float32),
+                    torch.tensor(stat_scaled, dtype=torch.float32)
+                ).numpy()
+            return preds_tensor.flatten()
+            
+        background = shap.sample(X_all, min(10, len(X_all)), random_state=42)
+        explainer = shap.KernelExplainer(shap_predict_fn, background)
+        shap_vals = explainer.shap_values(student_df)
         
         explanations = []
-        for col, val in zip(X.columns, shap_vals[0]):
+        for col, val in zip(FEATURE_COLS, shap_vals[0]):
             explanations.append({
                 "feature": col,
                 "impact": round(float(val), 2)
@@ -382,15 +333,17 @@ def add_student():
 
         df = load_or_create_data()
         new_row = {
-            "study_hours": float(data['study_hours']),
             "attendance": float(data['attendance']),
-            "previous_marks": float(data['previous_marks']),
-            "assignments_completed": float(data['assignments_completed']),
-            "sleep_hours": float(data.get('sleep_hours', 7.5)),
-            "lms_logins": float(data.get('lms_logins', 30.0)),
-            "mock_exams": float(data.get('mock_exams', 70.0)),
-            "final_score": float(data['final_score'])
+            "previous_marks": float(data['previous_marks'])
         }
+        for w in range(1, 5):
+            new_row[f"study_hours_w{w}"] = float(data[f"study_hours_w{w}"])
+            new_row[f"sleep_hours_w{w}"] = float(data[f"sleep_hours_w{w}"])
+            new_row[f"lms_logins_w{w}"] = float(data[f"lms_logins_w{w}"])
+            new_row[f"assignments_completed_w{w}"] = float(data[f"assignments_completed_w{w}"])
+            new_row[f"mock_exams_w{w}"] = float(data[f"mock_exams_w{w}"])
+        new_row["final_score"] = float(data['final_score'])
+        
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
         df.to_csv(CSV_PATH, index=False)
         
@@ -428,12 +381,36 @@ def delete_student(index):
 @app.route('/api/feature-importance', methods=['GET'])
 def feature_importance():
     try:
-        model, mae, r2, features, active_ver = get_model_and_stats()
-        importance = model.feature_importances_.tolist()
+        model, scaler_seq, scaler_static, mae, r2, active_ver = get_model_and_stats()
+        
         df = load_or_create_data()
+        X_all = df[FEATURE_COLS]
+        
+        import shap
+        def shap_predict_fn(X_np):
+            df_temp = pd.DataFrame(X_np, columns=FEATURE_COLS)
+            seq, stat, _ = get_seq_and_static_data(df_temp)
+            N_t, T_t, F_t = seq.shape
+            seq_flat_t = seq.reshape(-1, F_t)
+            seq_scaled = scaler_seq.transform(seq_flat_t).reshape(N_t, T_t, F_t)
+            stat_scaled = scaler_static.transform(stat)
+            with torch.no_grad():
+                preds_tensor = model(
+                    torch.tensor(seq_scaled, dtype=torch.float32),
+                    torch.tensor(stat_scaled, dtype=torch.float32)
+                ).numpy()
+            return preds_tensor.flatten()
+            
+        background = shap.sample(X_all, min(10, len(X_all)), random_state=42)
+        explainer = shap.KernelExplainer(shap_predict_fn, background)
+        sample_subset = shap.sample(X_all, min(10, len(X_all)), random_state=42)
+        shap_vals = explainer.shap_values(sample_subset)
+        
+        importance = np.mean(np.abs(shap_vals[0]), axis=0).tolist()
+        
         return jsonify({
             "success": True,
-            "features": features,
+            "features": FEATURE_COLS,
             "importance": importance,
             "mae": mae,
             "r2": r2,
@@ -497,8 +474,8 @@ def rollback_model():
         if not model_entry:
             return jsonify({"success": False, "error": f"Version {target_version} not found in history"}), 400
             
-        # Check if the specific checkpoint pickle file still exists
-        model_filename = f"model_{target_version}.pkl"
+        # Check if the specific checkpoint file still exists
+        model_filename = f"model_{target_version}.pth"
         model_filepath = os.path.join(MODELS_DIR, model_filename)
         
         if not os.path.exists(model_filepath):
