@@ -349,15 +349,17 @@ function renderInsights(data) {
   const container = document.getElementById('chart-bars');
   const maxImp = Math.max(...data.importance);
 
+  const sumImp = data.importance.reduce((a, b) => a + b, 0) || 1.0;
   container.innerHTML = data.features.map((feat, i) => {
     const pct = ((data.importance[i] / maxImp) * 100).toFixed(1);
+    const relativePct = ((data.importance[i] / sumImp) * 100).toFixed(1);
     const label = FEATURE_LABELS[feat] || feat;
     return `
       <div class="chart-bar-row">
         <div class="chart-bar-label">${label}</div>
         <div class="chart-bar-track">
           <div class="chart-bar-fill" data-width="${pct}">
-            <span class="chart-bar-pct">${(data.importance[i] * 100).toFixed(1)}%</span>
+            <span class="chart-bar-pct">${relativePct}%</span>
           </div>
         </div>
       </div>
