@@ -24,17 +24,13 @@ function switchTab(tab) {
 // ── SLIDER LIVE LABELS ────────────────────────────────
 function bindSliders() {
   const map = [
-    { id: 'study_hours',          valId: 'val-study',      suffix: 'h' },
     { id: 'attendance',           valId: 'val-attendance',  suffix: '%' },
     { id: 'previous_marks',       valId: 'val-marks',       suffix: '' },
-    { id: 'assignments_completed',valId: 'val-assign',      suffix: '' },
-    { id: 'sleep_hours',          valId: 'val-sleep',       suffix: 'h' },
-    { id: 'lms_logins',           valId: 'val-lms',         suffix: '' },
-    { id: 'mock_exams',           valId: 'val-mock',        suffix: '' },
   ];
   map.forEach(({ id, valId, suffix }) => {
     const slider = document.getElementById(id);
     const label  = document.getElementById(valId);
+    if (!slider || !label) return;
     function update() {
       label.textContent = slider.value + suffix;
       updateSliderFill(slider);
@@ -171,7 +167,7 @@ function showResult(data) {
   const shapList = document.getElementById('shap-list');
   if (shapList && data.explanations) {
     // Sort features by absolute impact (highest impact first)
-    const sorted = [...data.explanations].sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
+    const sorted = [...data.explanations];
     
     shapList.innerHTML = sorted.map(item => {
       const label = FEATURE_LABELS[item.feature] || item.feature;
