@@ -14,7 +14,7 @@ class StudentLSTMRegressor(nn.Module):
         self.lstm = nn.LSTM(input_size=seq_features, hidden_size=hidden_dim, num_layers=num_layers, batch_first=True)
         self.fc = nn.Sequential(
             nn.Linear(hidden_dim, 16),
-            nn.ReLU(),
+            nn.LeakyReLU(0.05),
             nn.Linear(16, 1)
         )
         

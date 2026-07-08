@@ -264,9 +264,9 @@ def predict():
                 preds_tensor = model(torch.tensor(seq_scaled, dtype=torch.float32)).numpy()
             return preds_tensor.flatten()
             
-        background = shap.sample(X_all, min(10, len(X_all)), random_state=42)
+        background = X_all
         explainer = shap.KernelExplainer(shap_predict_fn, background)
-        shap_vals = explainer.shap_values(student_df)
+        shap_vals = explainer.shap_values(student_df, l1_reg=False)
         
         if isinstance(shap_vals, list):
             shap_vals = shap_vals[0]
@@ -392,10 +392,10 @@ def feature_importance():
                 preds_tensor = model(torch.tensor(seq_scaled, dtype=torch.float32)).numpy()
             return preds_tensor.flatten()
             
-        background = shap.sample(X_all, min(10, len(X_all)), random_state=42)
+        background = X_all
         explainer = shap.KernelExplainer(shap_predict_fn, background)
-        sample_subset = shap.sample(X_all, min(10, len(X_all)), random_state=42)
-        shap_vals = explainer.shap_values(sample_subset)
+        sample_subset = X_all
+        shap_vals = explainer.shap_values(sample_subset, l1_reg=False)
         
         if isinstance(shap_vals, list):
             shap_vals = shap_vals[0]
