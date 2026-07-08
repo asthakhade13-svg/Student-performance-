@@ -723,6 +723,22 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+.shap-list::-webkit-scrollbar {
+  width: 4px;
+}
+.shap-list::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.02);
+}
+.shap-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.shap-list::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
 }
 .shap-item {
   display: flex;

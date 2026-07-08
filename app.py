@@ -188,7 +188,7 @@ def get_model_and_stats():
                 model = StudentLSTMRegressor()
                 model.load_state_dict(payload["model_state"])
                 model.eval()
-                return model, payload["scaler_seq"], payload["scaler_static"], model_entry["mae"], model_entry["r2"], active_ver
+                return model, payload["scaler"], model_entry["mae"], model_entry["r2"], active_ver
             except Exception as e:
                 print("Error loading model:", e)
                 
@@ -222,7 +222,7 @@ def predict():
         attendance = float(data['attendance'])
         previous_marks = float(data['previous_marks'])
         
-        model, scaler_seq, scaler_static, mae, r2, active_ver = get_model_and_stats()
+        model, scaler, mae, r2, active_ver = get_model_and_stats()
         
         student_data_dict = {
             "attendance": [attendance],
@@ -238,17 +238,13 @@ def predict():
         student_df = pd.DataFrame(student_data_dict)
         student_df = student_df[FEATURE_COLS]
         
-        seq_val, static_val, _ = get_seq_and_static_data(student_df)
+        seq_val, _ = get_seq_and_static_data(student_df)
         N_val, T_val, F_val = seq_val.shape
         seq_val_flat = seq_val.reshape(-1, F_val)
-        seq_val_scaled = scaler_seq.transform(seq_val_flat).reshape(N_val, T_val, F_val)
-        static_val_scaled = scaler_static.transform(static_val)
+        seq_val_scaled = scaler.transform(seq_val_flat).reshape(N_val, T_val, F_val)
         
         with torch.no_grad():
-            pred = model(
-                torch.tensor(seq_val_scaled, dtype=torch.float32),
-                torch.tensor(static_val_scaled, dtype=torch.float32)
-            ).numpy()
+            pred = model(torch.tensor(seq_val_scaled, dtype=torch.float32)).numpy()
             predicted_score = round(float(pred[0][0]), 2)
             predicted_score = max(0.0, min(100.0, predicted_score))
             
@@ -259,23 +255,22 @@ def predict():
         
         def shap_predict_fn(X_np):
             df_temp = pd.DataFrame(X_np, columns=FEATURE_COLS)
-            seq, stat, _ = get_seq_and_static_data(df_temp)
+            seq, _ = get_seq_and_static_data(df_temp)
             N_t, T_t, F_t = seq.shape
             seq_flat_t = seq.reshape(-1, F_t)
-            seq_scaled = scaler_seq.transform(seq_flat_t).reshape(N_t, T_t, F_t)
-            stat_scaled = scaler_static.transform(stat)
+            seq_scaled = scaler.transform(seq_flat_t).reshape(N_t, T_t, F_t)
             
             with torch.no_grad():
-                preds_tensor = model(
-                    torch.tensor(seq_scaled, dtype=torch.float32),
-                    torch.tensor(stat_scaled, dtype=torch.float32)
-                ).numpy()
+                preds_tensor = model(torch.tensor(seq_scaled, dtype=torch.float32)).numpy()
             return preds_tensor.flatten()
             
         background = shap.sample(X_all, min(10, len(X_all)), random_state=42)
         explainer = shap.KernelExplainer(shap_predict_fn, background)
         shap_vals = explainer.shap_values(student_df)
         
+        if isinstance(shap_vals, list):
+            shap_vals = shap_vals[0]
+            
         explanations = []
         for col, val in zip(FEATURE_COLS, shap_vals[0]):
             explanations.append({
@@ -381,7 +376,7 @@ def delete_student(index):
 @app.route('/api/feature-importance', methods=['GET'])
 def feature_importance():
     try:
-        model, scaler_seq, scaler_static, mae, r2, active_ver = get_model_and_stats()
+        model, scaler, mae, r2, active_ver = get_model_and_stats()
         
         df = load_or_create_data()
         X_all = df[FEATURE_COLS]
@@ -389,16 +384,12 @@ def feature_importance():
         import shap
         def shap_predict_fn(X_np):
             df_temp = pd.DataFrame(X_np, columns=FEATURE_COLS)
-            seq, stat, _ = get_seq_and_static_data(df_temp)
+            seq, _ = get_seq_and_static_data(df_temp)
             N_t, T_t, F_t = seq.shape
             seq_flat_t = seq.reshape(-1, F_t)
-            seq_scaled = scaler_seq.transform(seq_flat_t).reshape(N_t, T_t, F_t)
-            stat_scaled = scaler_static.transform(stat)
+            seq_scaled = scaler.transform(seq_flat_t).reshape(N_t, T_t, F_t)
             with torch.no_grad():
-                preds_tensor = model(
-                    torch.tensor(seq_scaled, dtype=torch.float32),
-                    torch.tensor(stat_scaled, dtype=torch.float32)
-                ).numpy()
+                preds_tensor = model(torch.tensor(seq_scaled, dtype=torch.float32)).numpy()
             return preds_tensor.flatten()
             
         background = shap.sample(X_all, min(10, len(X_all)), random_state=42)
@@ -406,7 +397,10 @@ def feature_importance():
         sample_subset = shap.sample(X_all, min(10, len(X_all)), random_state=42)
         shap_vals = explainer.shap_values(sample_subset)
         
-        importance = np.mean(np.abs(shap_vals[0]), axis=0).tolist()
+        if isinstance(shap_vals, list):
+            shap_vals = shap_vals[0]
+            
+        importance = np.mean(np.abs(shap_vals), axis=0).tolist()
         
         return jsonify({
             "success": True,

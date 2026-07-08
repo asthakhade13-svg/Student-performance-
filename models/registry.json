@@ -1,5 +1,5 @@
 {
-  "active_version": "v10",
+  "active_version": "v11",
   "history": [
     {
       "version": "v1",
@@ -83,6 +83,15 @@
       "mae_std": 1.59,
       "data_size": 18,
       "created_at": "2026-07-08 22:44:06"
+    },
+    {
+      "version": "v11",
+      "path": "C:\\Users\\Astha\\OneDrive\\Desktop\\student\\models\\model_v11.pth",
+      "r2": 0.72,
+      "mae": 3.47,
+      "mae_std": 1.45,
+      "data_size": 18,
+      "created_at": "2026-07-08 22:51:42"
     }
   ]
 }
