@@ -837,3 +837,31 @@ body {
 .table-input[type=number] {
   -moz-appearance: textfield;
 }
+
+/* ── WATERFALL PLOT ──────────────────────────────────── */
+.waterfall-section {
+  margin-top: 20px;
+  width: 100%;
+}
+.waterfall-wrapper {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  padding: 12px 8px;
+  margin-top: 10px;
+  overflow-x: auto;
+}
+.waterfall-svg {
+  display: block;
+  user-select: none;
+  font-family: inherit;
+}
+.waterfall-svg rect {
+  transition: opacity 0.2s, transform 0.2s;
+  transform-origin: center;
+}
+.waterfall-svg rect:hover {
+  opacity: 0.95;
+  filter: brightness(1.05);
+}

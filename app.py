@@ -292,6 +292,8 @@ def predict():
         else:
             grade, grade_class = "F", "grade-f"
 
+        base_value = round(float(explainer.expected_value), 2)
+
         return jsonify({
             "success": True,
             "predicted_score": predicted_score,
@@ -300,7 +302,8 @@ def predict():
             "mae": mae,
             "r2": r2,
             "active_version": active_ver,
-            "explanations": explanations
+            "explanations": explanations,
+            "base_value": base_value
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400

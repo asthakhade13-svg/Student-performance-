@@ -147,7 +147,8 @@ function showResult(data) {
     document.getElementById('perf-bar').style.width = score + '%';
   }, 100);
 
-
+  // Render Waterfall Plot
+  renderWaterfallPlot(data);
 
   // Feedback
   const fb = document.getElementById('feedback-box');
@@ -210,6 +211,180 @@ function showResult(data) {
       spawnSparkles(scoreCenter, 30);
     }, 450);
   }
+}
+
+function renderWaterfallPlot(data) {
+  const container = document.getElementById('waterfall-wrapper');
+  if (!container || !data.explanations) return;
+  
+  const baseValue = data.base_value || 70.0;
+  const predScore = data.predicted_score;
+  
+  const sortedExps = [...data.explanations].sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
+  
+  const maxFeaturesToShow = 6;
+  const topFeatures = sortedExps.slice(0, maxFeaturesToShow);
+  const otherFeatures = sortedExps.slice(maxFeaturesToShow);
+  
+  const steps = [];
+  
+  steps.push({
+    label: 'Cohort Base Value',
+    impact: 0,
+    cumulative: baseValue,
+    isBase: true
+  });
+  
+  let current = baseValue;
+  
+  topFeatures.forEach(feat => {
+    current += feat.impact;
+    const cleanLabel = FEATURE_LABELS[feat.feature] || feat.feature;
+    let valText = '';
+    const inputEl = document.getElementById(feat.feature);
+    if (inputEl) {
+      let suffix = '';
+      if (feat.feature === 'attendance') suffix = '%';
+      else if (feat.feature.startsWith('study_hours')) suffix = 'h';
+      else if (feat.feature.startsWith('sleep_hours')) suffix = 'h';
+      else if (feat.feature.startsWith('assignments_completed')) suffix = '/10';
+      valText = ` (${inputEl.value}${suffix})`;
+    }
+    steps.push({
+      label: cleanLabel + valText,
+      impact: feat.impact,
+      cumulative: current
+    });
+  });
+  
+  if (otherFeatures.length > 0) {
+    const otherImpact = otherFeatures.reduce((sum, f) => sum + f.impact, 0);
+    current += otherImpact;
+    steps.push({
+      label: `${otherFeatures.length} Other Features`,
+      impact: otherImpact,
+      cumulative: current
+    });
+  }
+  
+  steps.push({
+    label: 'Predicted Score',
+    impact: 0,
+    cumulative: predScore,
+    isFinal: true
+  });
+  
+  const allValues = steps.map(s => s.cumulative);
+  allValues.push(baseValue);
+  allValues.push(predScore);
+  const minVal = Math.min(...allValues) - 1.5;
+  const maxVal = Math.max(...allValues) + 1.5;
+  const range = maxVal - minVal;
+  
+  const rowHeight = 32;
+  const marginTop = 30;
+  const marginBottom = 30;
+  const marginLeft = 155;
+  const marginRight = 55;
+  const width = 600;
+  const height = marginTop + marginBottom + (steps.length * rowHeight);
+  
+  const getX = (val) => {
+    return marginLeft + ((val - minVal) / range) * (width - marginLeft - marginRight);
+  };
+  
+  let svgContent = `<svg class="waterfall-svg" width="100%" height="100%" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">`;
+  
+  const gridTicks = 5;
+  for (let i = 0; i < gridTicks; i++) {
+    const val = minVal + (range / (gridTicks - 1)) * i;
+    const x = getX(val);
+    svgContent += `
+      <line x1="${x}" y1="${marginTop - 10}" x2="${x}" y2="${height - marginBottom}" stroke="rgba(0,0,0,0.04)" stroke-dasharray="3,3" />
+      <text x="${x}" y="${height - 10}" font-size="9" fill="var(--muted)" font-weight="600" text-anchor="middle">${val.toFixed(1)}</text>
+    `;
+  }
+  
+  const baseX = getX(baseValue);
+  svgContent += `<line x1="${baseX}" y1="${marginTop - 10}" x2="${baseX}" y2="${height - marginBottom}" stroke="rgba(0,0,0,0.15)" stroke-width="1.5" stroke-dasharray="4,4" />`;
+  svgContent += `<text x="${baseX}" y="${marginTop - 15}" font-size="9" fill="var(--muted)" font-weight="700" text-anchor="middle">Base (${baseValue.toFixed(1)})</text>`;
+  
+  let prevVal = baseValue;
+  
+  steps.forEach((step, idx) => {
+    const y = marginTop + idx * rowHeight + (rowHeight - 16) / 2;
+    const barHeight = 16;
+    
+    let color = 'var(--text)';
+    let x1 = 0, x2 = 0;
+    
+    if (step.isBase) {
+      x1 = getX(step.cumulative) - 3;
+      x2 = getX(step.cumulative) + 3;
+    } else if (step.isFinal) {
+      x1 = getX(step.cumulative) - 4;
+      x2 = getX(step.cumulative) + 4;
+    } else {
+      if (step.impact > 0) {
+        color = '#3d6b00';
+        x1 = getX(prevVal);
+        x2 = getX(step.cumulative);
+      } else {
+        color = '#a82000';
+        x1 = getX(step.cumulative);
+        x2 = getX(prevVal);
+      }
+    }
+    
+    const barWidth = Math.max(2, Math.abs(x2 - x1));
+    const rectX = Math.min(x1, x2);
+    
+    if (idx > 0) {
+      const prevY = marginTop + (idx - 1) * rowHeight + (rowHeight - 16) / 2 + barHeight / 2;
+      const currY = y + barHeight / 2;
+      const connX = getX(prevVal);
+      svgContent += `<line x1="${connX}" y1="${prevY}" x2="${connX}" y2="${currY}" stroke="rgba(0,0,0,0.15)" stroke-width="1" stroke-dasharray="2,2" />`;
+    }
+    
+    const labelY = y + barHeight - 4;
+    svgContent += `
+      <text x="10" y="${labelY}" font-size="10" font-weight="600" fill="var(--text)" text-anchor="start">${step.label}</text>
+    `;
+    
+    let fillColor = 'rgba(120, 120, 120, 0.7)';
+    if (step.isBase) {
+      fillColor = 'var(--muted)';
+    } else if (step.isFinal) {
+      fillColor = 'var(--primary)';
+    } else if (step.impact > 0) {
+      fillColor = '#5a8a00';
+    } else {
+      fillColor = '#c97a00';
+    }
+    
+    svgContent += `
+      <rect x="${rectX}" y="${y}" width="${barWidth}" height="${barHeight}" rx="3" fill="${fillColor}" />
+    `;
+    
+    const impactText = step.isBase ? `${step.cumulative.toFixed(1)}` :
+                       step.isFinal ? `${step.cumulative.toFixed(1)}` :
+                       (step.impact > 0 ? `+${step.impact.toFixed(2)}` : `${step.impact.toFixed(2)}`);
+                       
+    const textAnchor = (step.isBase || step.isFinal || step.impact > 0) ? 'start' : 'end';
+    const textX = (step.isBase || step.isFinal || step.impact > 0) ? rectX + barWidth + 6 : rectX - 6;
+    
+    let textStyle = `font-weight: 700; font-size: 10px; fill: ${color};`;
+    svgContent += `
+      <text x="${textX}" y="${labelY}" style="${textStyle}" text-anchor="${textAnchor}">${impactText}</text>
+    `;
+    
+    if (!step.isBase && !step.isFinal) {
+      prevVal = step.cumulative;
+    }
+  });
+  
+  svgContent += `</svg>`;
+  container.innerHTML = svgContent;
 }
 
 function animateCounter(id, from, to, duration) {
