@@ -116,6 +116,7 @@ function showResult(data) {
     sleep_hours:           parseFloat((sumSleep / 4).toFixed(1)),
     lms_logins:            parseFloat((sumLms / 4).toFixed(1)),
     mock_exams:            parseFloat((sumMock / 4).toFixed(1)),
+    burnout_risk:          data.burnout_risk,
     predicted_score:       score
   };
 
@@ -129,6 +130,13 @@ function showResult(data) {
 
   // Animated counter
   animateCounter('score-display', 0, score, 1000);
+
+  // Update Burnout Badge
+  const burnoutBadge = document.getElementById('burnout-badge');
+  if (burnoutBadge) {
+    burnoutBadge.textContent = data.burnout_risk;
+    burnoutBadge.className = `burnout-badge risk-${data.burnout_risk.toLowerCase()}`;
+  }
 
   // Ring fill  (circumference = 2π × 80 ≈ 502.65)
   const C = 502.65;

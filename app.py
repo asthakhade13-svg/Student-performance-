@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import mean_absolute_error, r2_score
 import torch
 import torch.nn as nn
-from models.lstm_model import train_pytorch_model, StudentLSTMRegressor, get_seq_and_static_data
+from models.lstm_model import train_pytorch_model, StudentMultiTaskLSTM, get_seq_and_static_data
 
 app = Flask(__name__, static_folder='static')
 
@@ -185,10 +185,10 @@ def get_model_and_stats():
         if model_entry and os.path.exists(model_entry["path"]):
             try:
                 payload = joblib.load(model_entry["path"])
-                model = StudentLSTMRegressor()
+                model = StudentMultiTaskLSTM()
                 model.load_state_dict(payload["model_state"])
                 model.eval()
-                return model, payload["scaler"], model_entry["mae"], model_entry["r2"], active_ver
+                return model, payload["scaler_x"], payload["scaler_y"], model_entry["mae"], model_entry["r2"], active_ver
             except Exception as e:
                 print("Error loading model:", e)
                 
@@ -222,7 +222,7 @@ def predict():
         attendance = float(data['attendance'])
         previous_marks = float(data['previous_marks'])
         
-        model, scaler, mae, r2, active_ver = get_model_and_stats()
+        model, scaler_x, scaler_y, mae, r2, active_ver = get_model_and_stats()
         
         student_data_dict = {
             "attendance": [attendance],
@@ -238,15 +238,22 @@ def predict():
         student_df = pd.DataFrame(student_data_dict)
         student_df = student_df[FEATURE_COLS]
         
-        seq_val, _ = get_seq_and_static_data(student_df)
+        seq_val, _, _ = get_seq_and_static_data(student_df)
         N_val, T_val, F_val = seq_val.shape
         seq_val_flat = seq_val.reshape(-1, F_val)
-        seq_val_scaled = scaler.transform(seq_val_flat).reshape(N_val, T_val, F_val)
+        seq_val_scaled = scaler_x.transform(seq_val_flat).reshape(N_val, T_val, F_val)
         
         with torch.no_grad():
-            pred = model(torch.tensor(seq_val_scaled, dtype=torch.float32)).numpy()
-            predicted_score = round(float(pred[0][0]), 2)
+            pred_reg, pred_clf = model(torch.tensor(seq_val_scaled, dtype=torch.float32))
+            reg_unscaled = scaler_y.inverse_transform(pred_reg.numpy())
+            predicted_score = round(float(reg_unscaled[0][0]), 2)
             predicted_score = max(0.0, min(100.0, predicted_score))
+            
+            # Map burnout risk levels
+            probs = torch.softmax(pred_clf, dim=1).numpy()[0]
+            burnout_idx = int(np.argmax(probs))
+            burnout_labels = ["Low", "Medium", "High"]
+            burnout_risk = burnout_labels[burnout_idx]
             
         # Calculate SHAP explanations
         import shap
@@ -255,14 +262,15 @@ def predict():
         
         def shap_predict_fn(X_np):
             df_temp = pd.DataFrame(X_np, columns=FEATURE_COLS)
-            seq, _ = get_seq_and_static_data(df_temp)
+            seq, _, _ = get_seq_and_static_data(df_temp)
             N_t, T_t, F_t = seq.shape
             seq_flat_t = seq.reshape(-1, F_t)
-            seq_scaled = scaler.transform(seq_flat_t).reshape(N_t, T_t, F_t)
+            seq_scaled = scaler_x.transform(seq_flat_t).reshape(N_t, T_t, F_t)
             
             with torch.no_grad():
-                preds_tensor = model(torch.tensor(seq_scaled, dtype=torch.float32)).numpy()
-            return preds_tensor.flatten()
+                preds_tensor, _ = model(torch.tensor(seq_scaled, dtype=torch.float32))
+                preds_unscaled = scaler_y.inverse_transform(preds_tensor.numpy())
+            return preds_unscaled.flatten()
             
         background = X_all
         explainer = shap.KernelExplainer(shap_predict_fn, background)
@@ -303,7 +311,8 @@ def predict():
             "r2": r2,
             "active_version": active_ver,
             "explanations": explanations,
-            "base_value": base_value
+            "base_value": base_value,
+            "burnout_risk": burnout_risk
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -379,7 +388,7 @@ def delete_student(index):
 @app.route('/api/feature-importance', methods=['GET'])
 def feature_importance():
     try:
-        model, scaler, mae, r2, active_ver = get_model_and_stats()
+        model, scaler_x, scaler_y, mae, r2, active_ver = get_model_and_stats()
         
         df = load_or_create_data()
         X_all = df[FEATURE_COLS]
@@ -387,13 +396,14 @@ def feature_importance():
         import shap
         def shap_predict_fn(X_np):
             df_temp = pd.DataFrame(X_np, columns=FEATURE_COLS)
-            seq, _ = get_seq_and_static_data(df_temp)
+            seq, _, _ = get_seq_and_static_data(df_temp)
             N_t, T_t, F_t = seq.shape
             seq_flat_t = seq.reshape(-1, F_t)
-            seq_scaled = scaler.transform(seq_flat_t).reshape(N_t, T_t, F_t)
+            seq_scaled = scaler_x.transform(seq_flat_t).reshape(N_t, T_t, F_t)
             with torch.no_grad():
-                preds_tensor = model(torch.tensor(seq_scaled, dtype=torch.float32)).numpy()
-            return preds_tensor.flatten()
+                preds_tensor, _ = model(torch.tensor(seq_scaled, dtype=torch.float32))
+                preds_unscaled = scaler_y.inverse_transform(preds_tensor.numpy())
+            return preds_unscaled.flatten()
             
         background = X_all
         explainer = shap.KernelExplainer(shap_predict_fn, background)
@@ -505,14 +515,21 @@ def generate_advice():
         lms_logins = float(data.get('lms_logins', 30.0))
         mock_exams = float(data.get('mock_exams', 70.0))
         predicted_score = float(data.get('predicted_score', 65.0))
+        burnout_risk = data.get('burnout_risk', 'Low')
 
         # Check if API Key is configured
         if not GEMINI_API_KEY:
             # Return a high-quality simulated mock recommendation when no key is set
+            burnout_alert = (
+                "CRITICAL WARNING: High risk of student burnout! You must prioritize rest, increase sleep hours, and take frequent study breaks." if burnout_risk == "High"
+                else "Caution: Moderate risk of burnout detected. Balance study hours with relaxation and ensure regular sleep." if burnout_risk == "Medium"
+                else "Excellent! You are maintaining a healthy study-life balance."
+            )
             mock_plan = (
                 "### Personalized AI Academic Advisory Report\n\n"
                 "> *Notice: Gemini API Key is not set in environment variables. Displaying simulated data-driven plan.*\n\n"
                 "#### 1. Strength & Risk Factor Analysis\n"
+                f"*   **Burnout Risk Alert ({burnout_risk})**: {burnout_alert}\n"
                 f"*   **Attendance ({attendance}%)**: " + 
                 ("Excellent! You are attending class regularly, which builds a strong foundation." if attendance >= 85 
                  else "Moderate. Increasing attendance to 85%+ will help capture key topics.") + "\n"
@@ -561,9 +578,10 @@ def generate_advice():
             f"- Average Sleep Hours: {sleep_hours} hours/day\n"
             f"- Weekly LMS Logins: {lms_logins}\n"
             f"- Latest Mock Exam Score: {mock_exams}/100\n"
-            f"- AI Predicted Final Exam Score: {predicted_score}/100\n\n"
+            f"- AI Predicted Final Exam Score: {predicted_score}/100\n"
+            f"- Predicted Student Burnout Risk Category: {burnout_risk}\n\n"
             "Include these exact three sections, using headers:\n"
-            "1. Strength & Risk Factor Analysis: Analyze their metrics. Compare parameters and point out major areas causing lower scores vs. areas keeping them afloat.\n"
+            "1. Strength & Risk Factor Analysis: Analyze their metrics. Compare parameters and point out major areas causing lower scores vs. areas keeping them afloat. Make sure to address their predicted Burnout Risk category and offer advice accordingly.\n"
             "2. Custom 4-Week Action Planner: A specific, week-by-week plan detailing study subjects or practices to raise their grade.\n"
             "3. Recommended Daily Habits: Provide 3-4 specific behavioral habits (e.g. Pomodoro, active recall, sleep guidelines) based on their profile.\n\n"
             "Keep the tone motivational, specific, and actionable. Use bullet points and clean formatting. Do not use generic advice. Do not use any emojis or emoticons in the output."

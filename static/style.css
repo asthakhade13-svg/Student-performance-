@@ -865,3 +865,26 @@ body {
   opacity: 0.95;
   filter: brightness(1.05);
 }
+
+/* ── BURNOUT BADGES ─────────────────────────────────── */
+.burnout-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.3s ease;
+}
+.burnout-badge.risk-low {
+  color: #3d6b00;
+  background: rgba(197, 255, 127, 0.25);
+}
+.burnout-badge.risk-medium {
+  color: #a87600;
+  background: rgba(255, 220, 127, 0.25);
+}
+.burnout-badge.risk-high {
+  color: #a82000;
+  background: rgba(255, 150, 150, 0.25);
+}
