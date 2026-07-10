@@ -179,6 +179,31 @@ def train_model(df):
     return None, mae_mean, r2_mean, FEATURE_COLS, version
 
 
+PERSONALIZATION_FILE = os.path.join("models", "personalization.json")
+
+def load_personalization():
+    if not os.path.exists(PERSONALIZATION_FILE):
+        return {}
+    try:
+        with open(PERSONALIZATION_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def get_student_bias(student_id):
+    biases = load_personalization()
+    return float(biases.get(student_id, 0.0))
+
+def save_student_bias(student_id, bias_value):
+    biases = load_personalization()
+    biases[student_id] = float(bias_value)
+    try:
+        with open(PERSONALIZATION_FILE, "w", encoding="utf-8") as f:
+            json.dump(biases, f, indent=4)
+    except Exception as e:
+        print("Error saving personalization bias:", e)
+
+
 def get_model_and_stats():
     df = load_or_create_data()
     registry = load_registry()
@@ -290,6 +315,14 @@ def predict():
                 "impact": round(float(val), 2)
             })
 
+        # Personalization bias adjustment
+        student_id = data.get('student_id', 'default_student').strip() or 'default_student'
+        bias = get_student_bias(student_id)
+        
+        global_predicted_score = predicted_score
+        predicted_score = round(global_predicted_score + bias, 2)
+        predicted_score = max(0.0, min(100.0, predicted_score))
+
         # Determine grade
         if predicted_score >= 90:
             grade, grade_class = "A+", "grade-aplus"
@@ -309,6 +342,8 @@ def predict():
         return jsonify({
             "success": True,
             "predicted_score": predicted_score,
+            "global_predicted_score": global_predicted_score,
+            "personalization_bias": bias,
             "grade": grade,
             "grade_class": grade_class,
             "mae": mae,
@@ -664,6 +699,48 @@ def generate_advice():
             "success": True,
             "advice": advice_text,
             "is_mock": False
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route('/api/log-feedback', methods=['POST'])
+def log_feedback():
+    try:
+        data = request.get_json()
+        student_id = data.get('student_id', 'default_student').strip() or 'default_student'
+        actual_score = float(data.get('actual_score'))
+        predicted_score = float(data.get('predicted_score'))
+        features = data.get('features', {})
+        
+        # 1. Online Delta Rule Bias update
+        current_bias = get_student_bias(student_id)
+        error = actual_score - predicted_score
+        learning_rate = 0.2
+        new_bias = current_bias + learning_rate * error
+        save_student_bias(student_id, new_bias)
+        
+        # 2. Append new student record to student_data.csv for active retraining
+        df = load_or_create_data()
+        
+        new_row = {}
+        for col in FEATURE_COLS:
+            new_row[col] = float(features.get(col, 0.0))
+        new_row['final_score'] = actual_score
+        
+        new_df = pd.DataFrame([new_row])
+        df = pd.concat([df, new_df], ignore_index=True)
+        
+        # Save back to CSV
+        df.to_csv("student_data.csv", index=False)
+        
+        # 3. Synchronously retrain cohort model
+        train_model(df)
+        
+        return jsonify({
+            "success": True,
+            "new_bias": new_bias,
+            "message": f"Feedback logged successfully. Personalized bias is {new_bias:.2f}."
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400

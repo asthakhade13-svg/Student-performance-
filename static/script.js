@@ -56,6 +56,7 @@ async function runPrediction() {
   btn.querySelector('span:last-child').textContent = 'Predicting…';
 
   const payload = {
+    student_id:     (document.getElementById('student_id').value || '').trim() || 'default_student',
     attendance:     parseFloat(document.getElementById('attendance').value),
     previous_marks: parseFloat(document.getElementById('previous_marks').value)
   };
@@ -221,6 +222,80 @@ function showResult(data) {
       spawnSparkles(scoreCenter, 30);
     }, 450);
   }
+
+  // Update Personalization Bias
+  const biasEl = document.getElementById('personalization-bias');
+  if (biasEl) {
+    const biasVal = data.personalization_bias || 0.0;
+    const sign = biasVal >= 0 ? '+' : '';
+    biasEl.textContent = `${sign}${biasVal.toFixed(2)}`;
+  }
+
+  // Bind Log Grade feedback submit
+  const submitBtn = document.getElementById('submit-feedback-btn');
+  if (submitBtn) {
+    submitBtn.onclick = async () => {
+      const actualInput = document.getElementById('actual-score-input');
+      const actualVal = parseFloat(actualInput.value);
+      if (isNaN(actualVal) || actualVal < 0 || actualVal > 100) {
+        showToast('Please enter a valid actual score between 0 and 100.');
+        return;
+      }
+      
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Logging...';
+      
+      try {
+        const studentId = (document.getElementById('student_id').value || '').trim() || 'default_student';
+        const res = await fetch('/api/log-feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_id: studentId,
+            actual_score: actualVal,
+            predicted_score: data.predicted_score,
+            features: {
+              attendance: parseFloat(document.getElementById('attendance').value),
+              previous_marks: parseFloat(document.getElementById('previous_marks').value),
+              study_hours_w1: parseFloat(document.getElementById('study_hours_w1').value) || 0,
+              sleep_hours_w1: parseFloat(document.getElementById('sleep_hours_w1').value) || 0,
+              lms_logins_w1: parseFloat(document.getElementById('lms_logins_w1').value) || 0,
+              assignments_completed_w1: parseFloat(document.getElementById('assignments_completed_w1').value) || 0,
+              mock_exams_w1: parseFloat(document.getElementById('mock_exams_w1').value) || 0,
+              study_hours_w2: parseFloat(document.getElementById('study_hours_w2').value) || 0,
+              sleep_hours_w2: parseFloat(document.getElementById('sleep_hours_w2').value) || 0,
+              lms_logins_w2: parseFloat(document.getElementById('lms_logins_w2').value) || 0,
+              assignments_completed_w2: parseFloat(document.getElementById('assignments_completed_w2').value) || 0,
+              mock_exams_w2: parseFloat(document.getElementById('mock_exams_w2').value) || 0,
+              study_hours_w3: parseFloat(document.getElementById('study_hours_w3').value) || 0,
+              sleep_hours_w3: parseFloat(document.getElementById('sleep_hours_w3').value) || 0,
+              lms_logins_w3: parseFloat(document.getElementById('lms_logins_w3').value) || 0,
+              assignments_completed_w3: parseFloat(document.getElementById('assignments_completed_w3').value) || 0,
+              mock_exams_w3: parseFloat(document.getElementById('mock_exams_w3').value) || 0,
+              study_hours_w4: parseFloat(document.getElementById('study_hours_w4').value) || 0,
+              sleep_hours_w4: parseFloat(document.getElementById('sleep_hours_w4').value) || 0,
+              lms_logins_w4: parseFloat(document.getElementById('lms_logins_w4').value) || 0,
+              assignments_completed_w4: parseFloat(document.getElementById('assignments_completed_w4').value) || 0,
+              mock_exams_w4: parseFloat(document.getElementById('mock_exams_w4').value) || 0
+            }
+          })
+        });
+        const logData = await res.json();
+        if (logData.success) {
+          showToast(`Feedback logged successfully! Personalized bias updated to ${logData.new_bias.toFixed(2)}.`);
+          actualInput.value = '';
+          runPrediction();
+        } else {
+          showToast('Failed to log feedback: ' + logData.error);
+        }
+      } catch (e) {
+        showToast('Error sending feedback to server.');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Log Grade';
+      }
+    };
+  }
 }
 
 function renderWaterfallPlot(data) {
@@ -273,6 +348,16 @@ function renderWaterfallPlot(data) {
     steps.push({
       label: `${otherFeatures.length} Other Features`,
       impact: otherImpact,
+      cumulative: current
+    });
+  }
+  
+  const biasVal = data.personalization_bias || 0.0;
+  if (biasVal !== 0) {
+    current += biasVal;
+    steps.push({
+      label: 'Personalization Bias',
+      impact: biasVal,
       cumulative: current
     });
   }
