@@ -88,8 +88,10 @@ async function runPrediction() {
 }
 
 let lastPredictionPayload = null;
+let lastPredictionResult = null;
 
 function showResult(data) {
+  lastPredictionResult = data;
   document.getElementById('result-placeholder').classList.add('hidden');
   const content = document.getElementById('result-content');
   content.classList.remove('hidden');
@@ -719,10 +721,14 @@ async function generateAISuggestions() {
   responseText.innerHTML = '';
 
   try {
+    const advicePayload = {
+      ...lastPredictionPayload,
+      explanations: lastPredictionResult ? lastPredictionResult.explanations : []
+    };
     const res = await fetch('/api/generate-advice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(lastPredictionPayload)
+      body: JSON.stringify(advicePayload)
     });
     const data = await res.json();
     if (data.success) {

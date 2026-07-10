@@ -12,8 +12,12 @@ from sklearn.metrics import mean_absolute_error, r2_score
 import torch
 import torch.nn as nn
 from models.lstm_model import train_pytorch_model, StudentMultiTaskLSTM, get_seq_and_static_data
+from models.rag_vector_store import LocalVectorStore
 
 app = Flask(__name__, static_folder='static')
+
+# Initialize RAG Vector Store
+vector_store = LocalVectorStore()
 
 # Configure Gemini API
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -516,10 +520,73 @@ def generate_advice():
         mock_exams = float(data.get('mock_exams', 70.0))
         predicted_score = float(data.get('predicted_score', 65.0))
         burnout_risk = data.get('burnout_risk', 'Low')
+        explanations = data.get('explanations', [])
+
+        # RAG Pipeline: Extract features with negative SHAP impacts
+        negative_exps = [e for e in explanations if e.get('impact', 0) < 0]
+        negative_exps = sorted(negative_exps, key=lambda x: x.get('impact', 0))
+        top_neg_features = [e.get('feature') for e in negative_exps[:2]]
+
+        # Fallback queries based on low baseline metrics
+        if not top_neg_features:
+            fallbacks = []
+            if attendance < 85: fallbacks.append('attendance')
+            if sleep_hours < 7.0: fallbacks.append('sleep_hours')
+            if study_hours < 6.0: fallbacks.append('study_hours')
+            if assignments_completed < 8: fallbacks.append('assignments_completed')
+            if mock_exams < 70: fallbacks.append('mock_exams')
+            top_neg_features = fallbacks[:2]
+
+        if not top_neg_features:
+            top_neg_features = ['study_hours', 'mock_exams']
+
+        # Map base features to semantic query strings
+        query_map = {
+            'study_hours': "study hours active study routines daily study Chapter 1 Pages 12-45",
+            'sleep_hours': "sleep hours rest wellness cognitive fatigue Chapter 2 Pages 46-88",
+            'lms_logins': "LMS logins logins week digital engagement Chapter 3 Pages 89-130",
+            'assignments_completed': "assignments completed homework completion Chapter 4 Pages 131-180",
+            'mock_exams': "mock exams quiz baseline exam prep test strategy Chapter 5 Pages 181-220",
+            'attendance': "attendance lecture class slides syllabus links",
+            'previous_marks': "previous marks exam grades study foundations"
+        }
+
+        query_texts = []
+        for feat in top_neg_features:
+            base_feat = feat
+            for suffix in ['_w1', '_w2', '_w3', '_w4']:
+                if feat.endswith(suffix):
+                    base_feat = feat[:-3]
+                    break
+            q_str = query_map.get(base_feat, feat)
+            query_texts.append((feat, q_str))
+
+        # Retrieve documents from LocalVectorStore
+        retrieved_docs = []
+        for feat, q_str in query_texts:
+            matches = vector_store.query(q_str, top_k=1)
+            for m in matches:
+                source_label = m["metadata"]["source"]
+                retrieved_docs.append(f"Struggle Zone Reference ({feat} - from {source_label}):\n{m['content']}")
+
+        if not retrieved_docs:
+            matches = vector_store.query("syllabus textbook", top_k=2)
+            for m in matches:
+                source_label = m["metadata"]["source"]
+                retrieved_docs.append(f"General Context (from {source_label}):\n{m['content']}")
+
+        rag_context = "\n\n".join(retrieved_docs)
 
         # Check if API Key is configured
         if not GEMINI_API_KEY:
-            # Return a high-quality simulated mock recommendation when no key is set
+            # Format RAG recommendations callout in mock report
+            rag_callout = ""
+            if retrieved_docs:
+                rag_callout = "#### 📖 Recommended Reading & Study Resources (RAG matched):\n"
+                for doc in retrieved_docs:
+                    rag_callout += f"> * {doc.replace('# ', '').strip().replace(chr(10), ' ')}\n"
+                rag_callout += "\n"
+
             burnout_alert = (
                 "CRITICAL WARNING: High risk of student burnout! You must prioritize rest, increase sleep hours, and take frequent study breaks." if burnout_risk == "High"
                 else "Caution: Moderate risk of burnout detected. Balance study hours with relaxation and ensure regular sleep." if burnout_risk == "Medium"
@@ -527,8 +594,9 @@ def generate_advice():
             )
             mock_plan = (
                 "### Personalized AI Academic Advisory Report\n\n"
-                "> *Notice: Gemini API Key is not set in environment variables. Displaying simulated data-driven plan.*\n\n"
+                "> *Notice: Gemini API Key is not set in environment variables. Displaying simulated RAG-augmented study plan.*\n\n"
                 "#### 1. Strength & Risk Factor Analysis\n"
+                f"{rag_callout}"
                 f"*   **Burnout Risk Alert ({burnout_risk})**: {burnout_alert}\n"
                 f"*   **Attendance ({attendance}%)**: " + 
                 ("Excellent! You are attending class regularly, which builds a strong foundation." if attendance >= 85 
@@ -580,9 +648,11 @@ def generate_advice():
             f"- Latest Mock Exam Score: {mock_exams}/100\n"
             f"- AI Predicted Final Exam Score: {predicted_score}/100\n"
             f"- Predicted Student Burnout Risk Category: {burnout_risk}\n\n"
+            "--- Struggle Zone Context (Retrieval-Augmented Reference Material) ---\n"
+            f"{rag_context}\n\n"
             "Include these exact three sections, using headers:\n"
             "1. Strength & Risk Factor Analysis: Analyze their metrics. Compare parameters and point out major areas causing lower scores vs. areas keeping them afloat. Make sure to address their predicted Burnout Risk category and offer advice accordingly.\n"
-            "2. Custom 4-Week Action Planner: A specific, week-by-week plan detailing study subjects or practices to raise their grade.\n"
+            "2. Custom 4-Week Action Planner: A specific, week-by-week plan detailing study subjects or practices to raise their grade. You MUST reference the exact textbook page numbers, chapter names, or lecture slide links retrieved in the Struggle Zone Context above to make this plan highly actionable.\n"
             "3. Recommended Daily Habits: Provide 3-4 specific behavioral habits (e.g. Pomodoro, active recall, sleep guidelines) based on their profile.\n\n"
             "Keep the tone motivational, specific, and actionable. Use bullet points and clean formatting. Do not use generic advice. Do not use any emojis or emoticons in the output."
         )
