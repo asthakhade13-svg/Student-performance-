@@ -11,7 +11,9 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import mean_absolute_error, r2_score
 import torch
 import torch.nn as nn
-from models.lstm_model import train_pytorch_model, StudentMultiTaskLSTM, get_seq_and_static_data
+import sqlite3
+import threading
+from models.lstm_model import train_pytorch_model, StudentAttentionLSTM, get_seq_and_static_data
 from models.rag_vector_store import LocalVectorStore
 
 app = Flask(__name__, static_folder='static')
@@ -28,6 +30,10 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
 REGISTRY_PATH = os.path.join(MODELS_DIR, 'registry.json')
 CSV_PATH = os.path.join(BASE_DIR, 'student_data.csv')
+DB_PATH = os.path.join(MODELS_DIR, 'student_records.db')
+
+# Concurrency thread control locks for active retraining
+training_lock = threading.Lock()
 
 # Feature Engineering Helpers
 FEATURE_COLS = ["attendance", "previous_marks"]
@@ -73,21 +79,36 @@ def generate_default_sequence_data():
     data["final_score"] = final_score
     return data
 
-def load_or_create_data():
-    if not os.path.exists(CSV_PATH):
-        df = pd.DataFrame(generate_default_sequence_data())
-        df.to_csv(CSV_PATH, index=False)
-        return df
-    try:
-        df = pd.read_csv(CSV_PATH)
-        if "study_hours_w1" not in df.columns:
+def init_sqlite_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='student_data'")
+    table_exists = cursor.fetchone()
+    
+    if not table_exists:
+        df = None
+        if os.path.exists(CSV_PATH):
+            try:
+                df = pd.read_csv(CSV_PATH)
+            except Exception:
+                pass
+        if df is None or len(df) == 0 or "study_hours_w1" not in df.columns:
             df = pd.DataFrame(generate_default_sequence_data())
-            df.to_csv(CSV_PATH, index=False)
-        return df
+            
+        df.to_sql("student_data", conn, if_exists="replace", index=False)
+        conn.commit()
+    conn.close()
+
+def load_or_create_data():
+    init_sqlite_db()
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        df = pd.read_sql_query("SELECT * FROM student_data", conn)
     except Exception:
         df = pd.DataFrame(generate_default_sequence_data())
-        df.to_csv(CSV_PATH, index=False)
-        return df
+        df.to_sql("student_data", conn, if_exists="replace", index=False)
+    conn.close()
+    return df
 
 
 # ── MLOps Registry & Validation Helpers ───────────────────────────────
@@ -204,6 +225,27 @@ def save_student_bias(student_id, bias_value):
         print("Error saving personalization bias:", e)
 
 
+def background_train_task():
+    global training_lock
+    if not training_lock.acquire(blocking=False):
+        print("[MLOps] Background training already in progress. Skipping.")
+        return
+    try:
+        print("[MLOps] Background training started...")
+        df = load_or_create_data()
+        train_model(df)
+        print("[MLOps] Background training completed successfully.")
+    except Exception as e:
+        print("[MLOps] Error in background training:", e)
+    finally:
+        training_lock.release()
+
+def trigger_background_training():
+    t = threading.Thread(target=background_train_task)
+    t.daemon = True
+    t.start()
+
+
 def get_model_and_stats():
     df = load_or_create_data()
     registry = load_registry()
@@ -214,7 +256,7 @@ def get_model_and_stats():
         if model_entry and os.path.exists(model_entry["path"]):
             try:
                 payload = joblib.load(model_entry["path"])
-                model = StudentMultiTaskLSTM()
+                model = StudentAttentionLSTM()
                 model.load_state_dict(payload["model_state"])
                 model.eval()
                 return model, payload["scaler_x"], payload["scaler_y"], model_entry["mae"], model_entry["r2"], active_ver
@@ -273,7 +315,7 @@ def predict():
         seq_val_scaled = scaler_x.transform(seq_val_flat).reshape(N_val, T_val, F_val)
         
         with torch.no_grad():
-            pred_reg, pred_clf = model(torch.tensor(seq_val_scaled, dtype=torch.float32))
+            pred_reg, pred_clf, attn_weights = model(torch.tensor(seq_val_scaled, dtype=torch.float32))
             reg_unscaled = scaler_y.inverse_transform(pred_reg.numpy())
             predicted_score = round(float(reg_unscaled[0][0]), 2)
             predicted_score = max(0.0, min(100.0, predicted_score))
@@ -283,6 +325,9 @@ def predict():
             burnout_idx = int(np.argmax(probs))
             burnout_labels = ["Low", "Medium", "High"]
             burnout_risk = burnout_labels[burnout_idx]
+            
+            # Slice attention weights
+            attn_list = attn_weights.numpy()[0].flatten().tolist()
             
         # Calculate SHAP explanations
         import shap
@@ -297,7 +342,7 @@ def predict():
             seq_scaled = scaler_x.transform(seq_flat_t).reshape(N_t, T_t, F_t)
             
             with torch.no_grad():
-                preds_tensor, _ = model(torch.tensor(seq_scaled, dtype=torch.float32))
+                preds_tensor, _, _ = model(torch.tensor(seq_scaled, dtype=torch.float32))
                 preds_unscaled = scaler_y.inverse_transform(preds_tensor.numpy())
             return preds_unscaled.flatten()
             
@@ -351,7 +396,8 @@ def predict():
             "active_version": active_ver,
             "explanations": explanations,
             "base_value": base_value,
-            "burnout_risk": burnout_risk
+            "burnout_risk": burnout_risk,
+            "attention_weights": attn_list
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -390,16 +436,23 @@ def add_student():
             new_row[f"mock_exams_w{w}"] = float(data[f"mock_exams_w{w}"])
         new_row["final_score"] = float(data['final_score'])
         
-        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-        df.to_csv(CSV_PATH, index=False)
+        conn = sqlite3.connect(DB_PATH)
+        new_df = pd.DataFrame([new_row])
+        new_df.to_sql("student_data", conn, if_exists="append", index=False)
+        conn.commit()
         
-        # Retrain model with new data
-        _, mae, r2, _, active_ver = train_model(df)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM student_data")
+        total_count = cursor.fetchone()[0]
+        conn.close()
+        
+        # Trigger asynchronous background training
+        trigger_background_training()
+        
         return jsonify({
             "success": True, 
-            "message": f"Student added and model {active_ver} retrained!", 
-            "total": len(df),
-            "active_version": active_ver
+            "message": "Student added successfully. Background model retraining started.", 
+            "total": total_count
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -412,13 +465,18 @@ def delete_student(index):
         if index < 0 or index >= len(df):
             return jsonify({"success": False, "error": "Invalid index"}), 400
         df = df.drop(index=index).reset_index(drop=True)
-        df.to_csv(CSV_PATH, index=False)
-        _, mae, r2, _, active_ver = train_model(df)
+        
+        conn = sqlite3.connect(DB_PATH)
+        df.to_sql("student_data", conn, if_exists="replace", index=False)
+        conn.commit()
+        conn.close()
+        
+        trigger_background_training()
+        
         return jsonify({
             "success": True, 
-            "message": f"Student deleted and model {active_ver} retrained!", 
-            "total": len(df),
-            "active_version": active_ver
+            "message": "Student deleted successfully. Background model retraining started.", 
+            "total": len(df)
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -440,7 +498,7 @@ def feature_importance():
             seq_flat_t = seq.reshape(-1, F_t)
             seq_scaled = scaler_x.transform(seq_flat_t).reshape(N_t, T_t, F_t)
             with torch.no_grad():
-                preds_tensor, _ = model(torch.tensor(seq_scaled, dtype=torch.float32))
+                preds_tensor, _, _ = model(torch.tensor(seq_scaled, dtype=torch.float32))
                 preds_unscaled = scaler_y.inverse_transform(preds_tensor.numpy())
             return preds_unscaled.flatten()
             
@@ -720,27 +778,25 @@ def log_feedback():
         new_bias = current_bias + learning_rate * error
         save_student_bias(student_id, new_bias)
         
-        # 2. Append new student record to student_data.csv for active retraining
-        df = load_or_create_data()
-        
+        # 2. Append new student record to SQLite for active retraining
         new_row = {}
         for col in FEATURE_COLS:
             new_row[col] = float(features.get(col, 0.0))
         new_row['final_score'] = actual_score
         
+        conn = sqlite3.connect(DB_PATH)
         new_df = pd.DataFrame([new_row])
-        df = pd.concat([df, new_df], ignore_index=True)
+        new_df.to_sql("student_data", conn, if_exists="append", index=False)
+        conn.commit()
+        conn.close()
         
-        # Save back to CSV
-        df.to_csv("student_data.csv", index=False)
-        
-        # 3. Synchronously retrain cohort model
-        train_model(df)
+        # 3. Trigger asynchronous background training
+        trigger_background_training()
         
         return jsonify({
             "success": True,
             "new_bias": new_bias,
-            "message": f"Feedback logged successfully. Personalized bias is {new_bias:.2f}."
+            "message": f"Feedback logged successfully. Personalized bias is {new_bias:.2f}. Model retraining queued in background."
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400

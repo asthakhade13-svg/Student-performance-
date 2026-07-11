@@ -212,6 +212,18 @@
               </div>
             </div>
 
+            <!-- Weekly Study Attention Profile -->
+            <div class="card attention-card" id="attention-card" style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.45); border: 1px solid rgba(0,0,0,0.05); border-radius: 12px;">
+              <h3 style="font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; color: var(--text);">
+                <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--primary);"></span>
+                Weekly Study Attention Profile
+              </h3>
+              <p style="font-size: 0.7rem; color: var(--muted); margin-bottom: 12px; line-height: 1.3;">Shows how much the Deep Attention Network focused on each week's learning logs during prediction.</p>
+              <div id="attention-bars-wrapper" style="display: flex; flex-direction: column; gap: 8px;">
+                <!-- Dynamic attention progress bars will render here -->
+              </div>
+            </div>
+
             <!-- SHAP Waterfall Plot -->
             <div class="waterfall-section" id="waterfall-section">
               <div class="shap-title">Score Contribution Flow (Waterfall)</div>
