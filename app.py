@@ -13,7 +13,8 @@ import torch
 import torch.nn as nn
 import sqlite3
 import threading
-from models.lstm_model import train_pytorch_model, StudentAttentionLSTM, get_seq_and_static_data
+from models.lstm_model import train_pytorch_model, StudentTransformerLSTM, get_seq_and_static_data
+from models.personalization_manager import apply_personalization, train_personalized_head
 from models.rag_vector_store import LocalVectorStore
 
 app = Flask(__name__, static_folder='static')
@@ -256,7 +257,7 @@ def get_model_and_stats():
         if model_entry and os.path.exists(model_entry["path"]):
             try:
                 payload = joblib.load(model_entry["path"])
-                model = StudentAttentionLSTM()
+                model = StudentTransformerLSTM()
                 model.load_state_dict(payload["model_state"])
                 model.eval()
                 return model, payload["scaler_x"], payload["scaler_y"], model_entry["mae"], model_entry["r2"], active_ver
@@ -314,11 +315,13 @@ def predict():
         seq_val_flat = seq_val.reshape(-1, F_val)
         seq_val_scaled = scaler_x.transform(seq_val_flat).reshape(N_val, T_val, F_val)
         
+        student_id = data.get('student_id', 'default_student').strip() or 'default_student'
+        
         with torch.no_grad():
             pred_reg, pred_clf, attn_weights = model(torch.tensor(seq_val_scaled, dtype=torch.float32))
             reg_unscaled = scaler_y.inverse_transform(pred_reg.numpy())
-            predicted_score = round(float(reg_unscaled[0][0]), 2)
-            predicted_score = max(0.0, min(100.0, predicted_score))
+            global_predicted_score = round(float(reg_unscaled[0][0]), 2)
+            global_predicted_score = max(0.0, min(100.0, global_predicted_score))
             
             # Map burnout risk levels
             probs = torch.softmax(pred_clf, dim=1).numpy()[0]
@@ -328,6 +331,18 @@ def predict():
             
             # Slice attention weights
             attn_list = attn_weights.numpy()[0].flatten().tolist()
+            
+            # Apply meta-learning student-specific neural layer personalization
+            has_personalization = apply_personalization(model, student_id)
+            if has_personalization:
+                pred_reg_pers, _, _ = model(torch.tensor(seq_val_scaled, dtype=torch.float32))
+                reg_pers_unscaled = scaler_y.inverse_transform(pred_reg_pers.numpy())
+                predicted_score = round(float(reg_pers_unscaled[0][0]), 2)
+                predicted_score = max(0.0, min(100.0, predicted_score))
+            else:
+                predicted_score = global_predicted_score
+                
+            bias = round(predicted_score - global_predicted_score, 2)
             
         # Calculate SHAP explanations
         import shap
@@ -359,14 +374,6 @@ def predict():
                 "feature": col,
                 "impact": round(float(val), 2)
             })
-
-        # Personalization bias adjustment
-        student_id = data.get('student_id', 'default_student').strip() or 'default_student'
-        bias = get_student_bias(student_id)
-        
-        global_predicted_score = predicted_score
-        predicted_score = round(global_predicted_score + bias, 2)
-        predicted_score = max(0.0, min(100.0, predicted_score))
 
         # Determine grade
         if predicted_score >= 90:
@@ -771,13 +778,38 @@ def log_feedback():
         predicted_score = float(data.get('predicted_score'))
         features = data.get('features', {})
         
-        # 1. Online Delta Rule Bias update
-        current_bias = get_student_bias(student_id)
-        error = actual_score - predicted_score
-        learning_rate = 0.2
-        new_bias = current_bias + learning_rate * error
-        save_student_bias(student_id, new_bias)
+        # 1. Online Gradient Descent Meta-Learning fine-tuning
+        model, scaler_x, scaler_y, mae, r2, active_ver = get_model_and_stats()
         
+        # Build features DataFrame and sequence
+        features_dict = {}
+        for col in FEATURE_COLS:
+            features_dict[col] = [float(features.get(col, 0.0))]
+        feat_df = pd.DataFrame(features_dict)
+        seq_val, _, _ = get_seq_and_static_data(feat_df)
+        N_val, T_val, F_val = seq_val.shape
+        seq_val_flat = seq_val.reshape(-1, F_val)
+        seq_val_scaled = scaler_x.transform(seq_val_flat).reshape(N_val, T_val, F_val)
+        
+        # Apply current personalization if exists, then fine-tune online
+        apply_personalization(model, student_id)
+        train_personalized_head(model, seq_val_scaled, actual_score, scaler_y, student_id)
+        
+        # Compute new personalization bias offset
+        with torch.no_grad():
+            pred_reg_pers, _, _ = model(torch.tensor(seq_val_scaled, dtype=torch.float32))
+            reg_pers_unscaled = scaler_y.inverse_transform(pred_reg_pers.numpy())
+            new_personalized_score = round(float(reg_pers_unscaled[0][0]), 2)
+            new_personalized_score = max(0.0, min(100.0, new_personalized_score))
+            
+            # Load clean global model to calculate un-personalized score
+            global_model, _, _, _, _, _ = get_model_and_stats()
+            pred_reg_glob, _, _ = global_model(torch.tensor(seq_val_scaled, dtype=torch.float32))
+            reg_glob_unscaled = scaler_y.inverse_transform(pred_reg_glob.numpy())
+            new_global_score = round(float(reg_glob_unscaled[0][0]), 2)
+            
+            new_bias = round(new_personalized_score - new_global_score, 2)
+
         # 2. Append new student record to SQLite for active retraining
         new_row = {}
         for col in FEATURE_COLS:
@@ -796,7 +828,7 @@ def log_feedback():
         return jsonify({
             "success": True,
             "new_bias": new_bias,
-            "message": f"Feedback logged successfully. Personalized bias is {new_bias:.2f}. Model retraining queued in background."
+            "message": f"Feedback logged successfully. Personalized bias updated to {new_bias:+.2f}. Model retraining queued in background."
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400

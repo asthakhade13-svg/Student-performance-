@@ -8,13 +8,22 @@ from sklearn.model_selection import KFold
 from sklearn.metrics import mean_absolute_error, r2_score
 import joblib
 
-class StudentAttentionLSTM(nn.Module):
-    def __init__(self, seq_features=7, hidden_dim=16, num_layers=1):
-        super(StudentAttentionLSTM, self).__init__()
+class StudentTransformerLSTM(nn.Module):
+    def __init__(self, seq_features=7, hidden_dim=16, num_layers=1, nhead=2):
+        super(StudentTransformerLSTM, self).__init__()
         # Bidirectional LSTM to capture future and past context
         self.lstm = nn.LSTM(input_size=seq_features, hidden_size=hidden_dim, num_layers=num_layers, batch_first=True, bidirectional=True)
         
-        # Self-Attention scoring layer: maps Bi-LSTM hidden state (dim hidden_dim*2 = 32) to a scalar score
+        # Transformer Multi-Head Self-Attention block
+        self.transformer_layer = nn.TransformerEncoderLayer(
+            d_model=hidden_dim * 2,  # 32
+            nhead=nhead,
+            dim_feedforward=32,
+            dropout=0.1,
+            batch_first=True
+        )
+        
+        # Self-Attention scoring layer for temporal pooling
         self.attn_linear = nn.Sequential(
             nn.Linear(hidden_dim * 2, 16),
             nn.Tanh(),
@@ -33,19 +42,18 @@ class StudentAttentionLSTM(nn.Module):
         
     def forward(self, x):
         # x shape: [batch, 4, 7]
-        lstm_out, _ = self.lstm(x)  # shape: [batch, 4, hidden_dim * 2]
+        lstm_out, _ = self.lstm(x)  # shape: [batch, 4, hidden_dim * 2] (32)
         
-        # Compute raw attention scores for each time step
-        attn_scores = self.attn_linear(lstm_out)  # shape: [batch, 4, 1]
+        # Transformer Multi-Head Attention self-attention
+        trans_out = self.transformer_layer(lstm_out)  # shape: [batch, 4, 32]
         
-        # Softmax over time steps
+        # Temporal attention pooling
+        attn_scores = self.attn_linear(trans_out)  # shape: [batch, 4, 1]
         attn_weights = torch.softmax(attn_scores, dim=1)  # shape: [batch, 4, 1]
         
-        # Weighted context vector
-        context_vector = torch.sum(lstm_out * attn_weights, dim=1)  # shape: [batch, hidden_dim * 2]
+        context_vector = torch.sum(trans_out * attn_weights, dim=1)  # shape: [batch, 32]
         
         shared_out = self.shared_fc(context_vector)
-        
         reg_out = self.reg_head(shared_out)
         clf_out = self.clf_head(shared_out)
         
@@ -108,7 +116,7 @@ def train_pytorch_model(df, model_path):
             yr_tr, yr_val = y_reg_scaled[train_idx], y_reg_scaled[val_idx]
             yc_tr, yc_val = y_clf[train_idx], y_clf[val_idx]
             
-            model = StudentAttentionLSTM()
+            model = StudentTransformerLSTM()
             optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-4)
             reg_criterion = nn.MSELoss()
             clf_criterion = nn.CrossEntropyLoss()
@@ -141,7 +149,7 @@ def train_pytorch_model(df, model_path):
         mae_std = 0.0
         r2_mean = 0.5
         
-    final_model = StudentAttentionLSTM()
+    final_model = StudentTransformerLSTM()
     optimizer = torch.optim.Adam(final_model.parameters(), lr=0.01, weight_decay=1e-4)
     reg_criterion = nn.MSELoss()
     clf_criterion = nn.CrossEntropyLoss()
