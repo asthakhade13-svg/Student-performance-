@@ -497,7 +497,12 @@ def feature_importance():
         df = load_or_create_data()
         X_all = df[FEATURE_COLS]
         
+        # 1. Scale-Optimized SHAP background (1 sample median prototype) and subset evaluation (at most 10)
         import shap
+        median_x = X_all.median(axis=0).values.reshape(1, -1)
+        background = pd.DataFrame(median_x, columns=FEATURE_COLS)
+        sample_subset = X_all.sample(n=min(10, len(X_all)), random_state=42)
+        
         def shap_predict_fn(X_np):
             df_temp = pd.DataFrame(X_np, columns=FEATURE_COLS)
             seq, _, _ = get_seq_and_static_data(df_temp)
@@ -509,9 +514,7 @@ def feature_importance():
                 preds_unscaled = scaler_y.inverse_transform(preds_tensor.numpy())
             return preds_unscaled.flatten()
             
-        background = X_all
         explainer = shap.KernelExplainer(shap_predict_fn, background)
-        sample_subset = X_all
         shap_vals = explainer.shap_values(sample_subset, l1_reg=False)
         
         if isinstance(shap_vals, list):
@@ -519,13 +522,47 @@ def feature_importance():
             
         importance = np.mean(np.abs(shap_vals), axis=0).tolist()
         
+        # 2. Compute Class Cohort Metrics
+        total_students = len(df)
+        avg_attendance = round(float(df["attendance"].mean()), 1) if total_students else 0.0
+        avg_prev_marks = round(float(df["previous_marks"].mean()), 1) if total_students else 0.0
+        
+        cohort_scores = []
+        high_burnout_count = 0
+        
+        seq_data, _, _ = get_seq_and_static_data(df)
+        N_val, T_val, F_val = seq_data.shape
+        seq_flat_val = seq_data.reshape(-1, F_val)
+        seq_scaled_val = scaler_x.transform(seq_flat_val).reshape(N_val, T_val, F_val)
+        
+        with torch.no_grad():
+            pred_reg, pred_clf, _ = model(torch.tensor(seq_scaled_val, dtype=torch.float32))
+            reg_unscaled = scaler_y.inverse_transform(pred_reg.numpy())
+            
+            for idx in range(N_val):
+                score = round(float(reg_unscaled[idx][0]), 2)
+                score = max(0.0, min(100.0, score))
+                cohort_scores.append(score)
+                
+                probs = torch.softmax(pred_clf[idx], dim=0).numpy()
+                burnout_idx = int(np.argmax(probs))
+                if burnout_idx == 2:  # High burnout risk category
+                    high_burnout_count += 1
+                    
+        avg_predicted_score = round(float(np.mean(cohort_scores)), 1) if cohort_scores else 0.0
+        burnout_pct = round((high_burnout_count / total_students) * 100, 1) if total_students else 0.0
+        
         return jsonify({
             "success": True,
             "features": FEATURE_COLS,
             "importance": importance,
             "mae": mae,
             "r2": r2,
-            "total_students": len(df),
+            "total_students": total_students,
+            "avg_attendance": avg_attendance,
+            "avg_prev_marks": avg_prev_marks,
+            "avg_predicted_score": avg_predicted_score,
+            "burnout_pct": burnout_pct,
             "active_version": active_ver
         })
     except Exception as e:

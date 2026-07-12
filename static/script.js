@@ -639,7 +639,16 @@ for (let w = 1; w <= 4; w++) {
 }
 
 function renderInsights(data) {
-  document.getElementById('ins-students').textContent = data.total_students;
+  document.getElementById('ins-students').textContent = data.total_students || 0;
+  
+  const avgScoreEl = document.getElementById('ins-avg-score');
+  if (avgScoreEl) avgScoreEl.textContent = (data.avg_predicted_score || 0.0).toFixed(1) + '%';
+  
+  const avgAttEl = document.getElementById('ins-avg-attendance');
+  if (avgAttEl) avgAttEl.textContent = (data.avg_attendance || 0.0).toFixed(1) + '%';
+  
+  const burnoutPctEl = document.getElementById('ins-burnout-pct');
+  if (burnoutPctEl) burnoutPctEl.textContent = (data.burnout_pct || 0.0).toFixed(1) + '%';
 
   // Chart bars
   const container = document.getElementById('chart-bars');

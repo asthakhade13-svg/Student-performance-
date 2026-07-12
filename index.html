@@ -382,12 +382,26 @@
         <!-- Model Stats -->
         <div class="card stats-card">
           <h2 class="card-title">Cohort Summary</h2>
-          <div class="big-stats">
-
+          <div class="big-stats" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
             <div class="big-stat">
               <div class="big-stat-value" id="ins-students">—</div>
-              <div class="big-stat-label">Total Cohort Size</div>
+              <div class="big-stat-label">Cohort Size</div>
               <div class="big-stat-sub">Students Analyzed</div>
+            </div>
+            <div class="big-stat">
+              <div class="big-stat-value" id="ins-avg-score">—</div>
+              <div class="big-stat-label">Average Score</div>
+              <div class="big-stat-sub">Cohort Prediction</div>
+            </div>
+            <div class="big-stat">
+              <div class="big-stat-value" id="ins-avg-attendance">—</div>
+              <div class="big-stat-label">Avg Attendance</div>
+              <div class="big-stat-sub">Class Participation</div>
+            </div>
+            <div class="big-stat">
+              <div class="big-stat-value" id="ins-burnout-pct">—</div>
+              <div class="big-stat-label">Burnout Alert</div>
+              <div class="big-stat-sub">High Risk Students</div>
             </div>
           </div>
         </div>
