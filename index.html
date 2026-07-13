@@ -325,6 +325,16 @@
                 <input type="number" id="add-score" min="0" max="100" value="75" placeholder="0–100" />
               </div>
             </div>
+            <div class="input-row">
+              <div class="input-group" style="width: 100%; margin-bottom: 12px;">
+                <label>Silo School Node (Federated)</label>
+                <select id="add-school" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.15); background: white; font-size: 0.85rem; font-weight: 600; color: var(--text);">
+                  <option value="alpha">School Alpha Silo</option>
+                  <option value="beta">School Beta Silo</option>
+                  <option value="gamma">School Gamma Silo</option>
+                </select>
+              </div>
+            </div>
             <button class="add-btn" onclick="addStudent()">
               <span>Add Student Record</span>
             </button>
@@ -403,6 +413,48 @@
               <div class="big-stat-label">Burnout Alert</div>
               <div class="big-stat-sub">High Risk Students</div>
             </div>
+          </div>
+        </div>
+
+        <!-- Federated Learning Control Center -->
+        <div class="card stats-card" id="federated-card" style="grid-column: span 2; padding: 20px;">
+          <h2 class="card-title" style="display: flex; align-items: center; gap: 8px;">
+            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #007cff; animation: pulse 2s infinite;"></span>
+            Federated Learning Control Center
+          </h2>
+          <p class="card-sub" style="margin-bottom: 15px;">Collaboratively train the hybrid LSTM-Transformer model across local School Silos (Alpha, Beta, Gamma) using Federated Averaging (FedAvg) and Gaussian Differential Privacy.</p>
+          
+          <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px;">
+            <div style="flex: 1; min-width: 150px; background: rgba(0, 124, 255, 0.05); border: 1px solid rgba(0, 124, 255, 0.1); padding: 12px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 1.25rem; font-weight: 700; color: #007cff;" id="fed-alpha-size">—</div>
+              <div style="font-size: 0.7rem; color: var(--muted); font-weight: 600;">School Alpha Silo</div>
+            </div>
+            <div style="flex: 1; min-width: 150px; background: rgba(0, 124, 255, 0.05); border: 1px solid rgba(0, 124, 255, 0.1); padding: 12px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 1.25rem; font-weight: 700; color: #007cff;" id="fed-beta-size">—</div>
+              <div style="font-size: 0.7rem; color: var(--muted); font-weight: 600;">School Beta Silo</div>
+            </div>
+            <div style="flex: 1; min-width: 150px; background: rgba(0, 124, 255, 0.05); border: 1px solid rgba(0, 124, 255, 0.1); padding: 12px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 1.25rem; font-weight: 700; color: #007cff;" id="fed-gamma-size">—</div>
+              <div style="font-size: 0.7rem; color: var(--muted); font-weight: 600;">School Gamma Silo</div>
+            </div>
+          </div>
+          
+          <div style="display: flex; gap: 15px; align-items: center; margin-bottom: 20px; flex-wrap: wrap;">
+            <div class="field-group" style="margin-bottom: 0; min-width: 100px; display: flex; flex-direction: column;">
+              <label style="font-size: 0.7rem; margin-bottom: 4px; display: block; font-weight: 700; color: var(--muted);">Fed Rounds</label>
+              <input type="number" id="fed-rounds" value="3" min="1" max="10" style="padding: 8px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.15); width: 80px;" />
+            </div>
+            <div class="field-group" style="margin-bottom: 0; min-width: 100px; display: flex; flex-direction: column;">
+              <label style="font-size: 0.7rem; margin-bottom: 4px; display: block; font-weight: 700; color: var(--muted);">DP Noise Scale</label>
+              <input type="number" id="fed-noise" value="0.01" step="0.005" min="0" max="0.1" style="padding: 8px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.15); width: 100px;" />
+            </div>
+            <button id="run-fed-btn" onclick="runFederatedTraining()" class="btn" style="margin-top: 15px; background: #007cff; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer;">
+              Run Federated Aggregation
+            </button>
+          </div>
+          
+          <div style="background: #1e1e1e; color: #39ff14; font-family: monospace; font-size: 0.75rem; padding: 15px; border-radius: 8px; max-height: 200px; overflow-y: auto; text-align: left; line-height: 1.4;" id="fed-console">
+            &gt; Server ready for privacy-preserving federated aggregation. Click 'Run' to begin simulation.
           </div>
         </div>
 

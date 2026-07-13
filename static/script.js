@@ -542,13 +542,13 @@ function renderTable(rows) {
   tbody.innerHTML = rows.map((r, i) => `
     <tr>
       <td style="color:var(--muted)">${i + 1}</td>
-      <td>${r.study_hours}h</td>
+      <td>${r.study_hours_w4 !== undefined ? r.study_hours_w4 : r.study_hours}h</td>
       <td>${r.attendance}%</td>
       <td>${r.previous_marks}</td>
-      <td>${r.assignments_completed}/10</td>
-      <td>${r.sleep_hours || 7.5}h</td>
-      <td>${r.lms_logins || 30}</td>
-      <td>${r.mock_exams || r.previous_marks || 70}</td>
+      <td>${r.assignments_completed_w4 !== undefined ? r.assignments_completed_w4 : (r.assignments_completed || 0)}/10</td>
+      <td>${r.sleep_hours_w4 !== undefined ? r.sleep_hours_w4 : (r.sleep_hours || 7.5)}h</td>
+      <td>${r.lms_logins_w4 !== undefined ? r.lms_logins_w4 : (r.lms_logins || 30)}</td>
+      <td>${r.mock_exams_w4 !== undefined ? r.mock_exams_w4 : (r.mock_exams || r.previous_marks || 70)}</td>
       <td class="score-cell">${r.final_score}</td>
       <td><button class="delete-btn" onclick="deleteStudent(${i})">🗑 Delete</button></td>
     </tr>
@@ -570,6 +570,11 @@ async function addStudent() {
   // Validate
   for (const [k, v] of Object.entries(payload)) {
     if (isNaN(v)) { showFeedback('add-feedback', 'error', '⚠️ Please fill in all fields correctly.'); return; }
+  }
+
+  const schoolEl = document.getElementById('add-school');
+  if (schoolEl) {
+    payload.school_id = schoolEl.value;
   }
 
   try {
@@ -649,6 +654,14 @@ function renderInsights(data) {
   
   const burnoutPctEl = document.getElementById('ins-burnout-pct');
   if (burnoutPctEl) burnoutPctEl.textContent = (data.burnout_pct || 0.0).toFixed(1) + '%';
+  
+  const schoolSizes = data.school_sizes || {};
+  const alphaEl = document.getElementById('fed-alpha-size');
+  if (alphaEl) alphaEl.textContent = (schoolSizes.alpha || 0) + ' students';
+  const betaEl = document.getElementById('fed-beta-size');
+  if (betaEl) betaEl.textContent = (schoolSizes.beta || 0) + ' students';
+  const gammaEl = document.getElementById('fed-gamma-size');
+  if (gammaEl) gammaEl.textContent = (schoolSizes.gamma || 0) + ' students';
 
   // Chart bars
   const container = document.getElementById('chart-bars');
@@ -1011,3 +1024,63 @@ document.addEventListener('DOMContentLoaded', () => {
   injectRingGradient();
   fetchActiveModelVersion();
 });
+
+async function runFederatedTraining() {
+  const btn = document.getElementById('run-fed-btn');
+  const consoleEl = document.getElementById('fed-console');
+  if (!btn || !consoleEl) return;
+  
+  const rounds = parseInt(document.getElementById('fed-rounds').value) || 3;
+  const noiseScale = parseFloat(document.getElementById('fed-noise').value) || 0.01;
+  
+  btn.disabled = true;
+  btn.style.background = '#80bfff';
+  btn.textContent = 'Training Aggregated Model...';
+  
+  consoleEl.innerHTML = `&gt; Starting Federated Learning Simulation round with ${rounds} communication rounds...<br/>&gt; Distributing base hybrid LSTM-Transformer weight structures to Alpha, Beta, and Gamma client databases...`;
+  
+  try {
+    const res = await fetch('/api/federated-train', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rounds, noise_scale: noiseScale, epochs: 5 })
+    });
+    const data = await res.json();
+    if (data.success) {
+      let index = 0;
+      consoleEl.innerHTML = '';
+      function showNextLog() {
+        if (index < data.logs.length) {
+          consoleEl.innerHTML += `&gt; ${data.logs[index]}<br/>`;
+          consoleEl.scrollTop = consoleEl.scrollHeight;
+          index++;
+          setTimeout(showNextLog, 400);
+        } else {
+          consoleEl.innerHTML += `<br/>&gt; 🎉 Federated training round succeeded! Registered active model as version ${data.active_version}.`;
+          consoleEl.scrollTop = consoleEl.scrollHeight;
+          btn.disabled = false;
+          btn.style.background = '#007cff';
+          btn.textContent = 'Run Federated Aggregation';
+          
+          fetchActiveModelVersion();
+          loadInsights();
+          showToast('Federated Learning training completed successfully!');
+        }
+      }
+      showNextLog();
+    } else {
+      consoleEl.innerHTML += `<br/>&gt; ❌ Error: ${data.error}`;
+      if (data.logs) {
+        data.logs.forEach(l => { consoleEl.innerHTML += `<br/>&gt; ${l}`; });
+      }
+      btn.disabled = false;
+      btn.style.background = '#007cff';
+      btn.textContent = 'Run Federated Aggregation';
+    }
+  } catch (e) {
+    consoleEl.innerHTML += `<br/>&gt; ❌ Error: Failed to connect to local federation server.`;
+    btn.disabled = false;
+    btn.style.background = '#007cff';
+    btn.textContent = 'Run Federated Aggregation';
+  }
+}

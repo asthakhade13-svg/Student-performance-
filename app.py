@@ -98,6 +98,21 @@ def init_sqlite_db():
             
         df.to_sql("student_data", conn, if_exists="replace", index=False)
         conn.commit()
+        
+    for school in ["alpha", "beta", "gamma"]:
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='student_data_{school}'")
+        silo_exists = cursor.fetchone()
+        if not silo_exists:
+            df = pd.read_sql_query("SELECT * FROM student_data", conn)
+            if school == "alpha":
+                silo_df = df[df.index % 3 == 0].reset_index(drop=True)
+            elif school == "beta":
+                silo_df = df[df.index % 3 == 1].reset_index(drop=True)
+            else:
+                silo_df = df[df.index % 3 == 2].reset_index(drop=True)
+            silo_df.to_sql(f"student_data_{school}", conn, if_exists="replace", index=False)
+            conn.commit()
+            
     conn.close()
 
 def load_or_create_data():
@@ -130,6 +145,13 @@ def save_registry(registry):
 
 
 def validate_student_data(data, is_predict=False):
+    # Auto-replicate single inputs to weekly inputs to support simple frontend forms
+    for feat in ["study_hours", "sleep_hours", "lms_logins", "assignments_completed", "mock_exams"]:
+        if feat in data:
+            for w in range(1, 5):
+                if f"{feat}_w{w}" not in data:
+                    data[f"{feat}_w{w}"] = data[feat]
+                    
     try:
         att = float(data.get('attendance'))
         pm = float(data.get('previous_marks'))
@@ -443,8 +465,15 @@ def add_student():
             new_row[f"mock_exams_w{w}"] = float(data[f"mock_exams_w{w}"])
         new_row["final_score"] = float(data['final_score'])
         
+        school_id = data.get("school_id", "alpha").strip().lower()
+        if school_id not in ["alpha", "beta", "gamma"]:
+            school_id = "alpha"
+            
         conn = sqlite3.connect(DB_PATH)
         new_df = pd.DataFrame([new_row])
+        # Write to local school silo database
+        new_df.to_sql(f"student_data_{school_id}", conn, if_exists="append", index=False)
+        # Also write to global student_data
         new_df.to_sql("student_data", conn, if_exists="append", index=False)
         conn.commit()
         
@@ -458,7 +487,7 @@ def add_student():
         
         return jsonify({
             "success": True, 
-            "message": "Student added successfully. Background model retraining started.", 
+            "message": f"Student added to school '{school_id.upper()}' silo. Background model retraining started.", 
             "total": total_count
         })
     except Exception as e:
@@ -552,6 +581,18 @@ def feature_importance():
         avg_predicted_score = round(float(np.mean(cohort_scores)), 1) if cohort_scores else 0.0
         burnout_pct = round((high_burnout_count / total_students) * 100, 1) if total_students else 0.0
         
+        # 3. Compute Local School Silo Data Sizes
+        school_sizes = {}
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        for school in ["alpha", "beta", "gamma"]:
+            try:
+                cursor.execute(f"SELECT COUNT(*) FROM student_data_{school}")
+                school_sizes[school] = cursor.fetchone()[0]
+            except Exception:
+                school_sizes[school] = 0
+        conn.close()
+        
         return jsonify({
             "success": True,
             "features": FEATURE_COLS,
@@ -563,6 +604,7 @@ def feature_importance():
             "avg_prev_marks": avg_prev_marks,
             "avg_predicted_score": avg_predicted_score,
             "burnout_pct": burnout_pct,
+            "school_sizes": school_sizes,
             "active_version": active_ver
         })
     except Exception as e:
@@ -581,6 +623,30 @@ def retrain():
             "r2": r2,
             "active_version": active_ver
         })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route('/api/federated-train', methods=['POST'])
+def federated_train():
+    try:
+        from models.federated_learning import run_federated_rounds
+        data = request.get_json() or {}
+        rounds = int(data.get("rounds", 3))
+        epochs = int(data.get("epochs", 5))
+        lr = float(data.get("lr", 0.01))
+        noise_scale = float(data.get("noise_scale", 0.01))
+        
+        success, logs, active_ver = run_federated_rounds(rounds=rounds, epochs=epochs, lr=lr, noise_scale=noise_scale)
+        if success:
+            return jsonify({
+                "success": True,
+                "message": f"Federated model {active_ver} trained and active!",
+                "logs": logs,
+                "active_version": active_ver
+            })
+        else:
+            return jsonify({"success": False, "error": "Federated training failed.", "logs": logs}), 400
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
 
