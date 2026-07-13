@@ -1,5 +1,5 @@
 {
-  "active_version": "v24",
+  "active_version": "v25",
   "history": [
     {
       "version": "v1",
@@ -209,6 +209,15 @@
       "mae_std": 0.0,
       "data_size": 24,
       "created_at": "2026-07-13 22:10:26 (Federated)"
+    },
+    {
+      "version": "v25",
+      "path": "models\\model_v25.pth",
+      "r2": 0.9,
+      "mae": 3.4,
+      "mae_std": 0.0,
+      "data_size": 24,
+      "created_at": "2026-07-13 22:12:08 (Federated)"
     }
   ]
 }

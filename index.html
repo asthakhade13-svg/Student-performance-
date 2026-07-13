@@ -30,14 +30,22 @@
       </div>
       <nav class="nav">
         <button class="nav-btn active" data-tab="predict" id="nav-predict">Predict</button>
-        <!-- Hiding Dataset and MLOps buttons for regular users -->
-        <!-- <button class="nav-btn" data-tab="dataset" id="nav-dataset">Dataset</button> -->
+        <button class="nav-btn" data-tab="dataset" id="nav-dataset" style="display: none;">Dataset</button>
         <button class="nav-btn" data-tab="insights" id="nav-insights">Insights</button>
-        <!-- <button class="nav-btn" data-tab="mlops" id="nav-mlops">MLOps</button> -->
+        <button class="nav-btn" data-tab="mlops" id="nav-mlops" style="display: none;">MLOps</button>
       </nav>
-      <div class="model-badge">
-        <span class="badge-dot"></span>
-        <span>System Online</span>
+      <div style="display: flex; align-items: center; gap: 20px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 0.75rem; font-weight: 700; color: var(--muted); cursor: pointer;" id="view-mode-label">User View</span>
+          <label class="switch">
+            <input type="checkbox" id="admin-mode-toggle" onchange="toggleAdminMode()" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="model-badge">
+          <span class="badge-dot"></span>
+          <span>System Online</span>
+        </div>
       </div>
     </div>
   </header>
@@ -417,7 +425,7 @@
         </div>
 
         <!-- Federated Learning Control Center -->
-        <div class="card stats-card" id="federated-card" style="grid-column: span 2; padding: 20px;">
+        <div class="card stats-card" id="federated-card" style="grid-column: span 2; padding: 20px; display: none;">
           <h2 class="card-title" style="display: flex; align-items: center; gap: 8px;">
             <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #007cff; animation: pulse 2s infinite;"></span>
             Federated Learning Control Center

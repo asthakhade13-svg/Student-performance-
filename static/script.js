@@ -1084,3 +1084,46 @@ async function runFederatedTraining() {
     btn.textContent = 'Run Federated Aggregation';
   }
 }
+
+function toggleAdminMode() {
+  const isChecked = document.getElementById('admin-mode-toggle').checked;
+  const label = document.getElementById('view-mode-label');
+  
+  if (isChecked) {
+    if (label) {
+      label.textContent = "Admin View";
+      label.style.color = "#007cff";
+    }
+    const datasetTab = document.getElementById('nav-dataset');
+    if (datasetTab) datasetTab.style.display = "inline-block";
+    const mlopsTab = document.getElementById('nav-mlops');
+    if (mlopsTab) mlopsTab.style.display = "inline-block";
+    
+    const fedCard = document.getElementById('federated-card');
+    if (fedCard) fedCard.style.display = "block";
+    
+    showToast("Switched to Admin MLOps Portal");
+  } else {
+    if (label) {
+      label.textContent = "User View";
+      label.style.color = "var(--muted)";
+    }
+    const datasetTab = document.getElementById('nav-dataset');
+    if (datasetTab) datasetTab.style.display = "none";
+    const mlopsTab = document.getElementById('nav-mlops');
+    if (mlopsTab) mlopsTab.style.display = "none";
+    
+    // Fallback switch to predict tab if current active tab is dataset or mlops
+    const activeTab = document.querySelector('.nav-btn.active');
+    if (activeTab && (activeTab.getAttribute('data-tab') === 'dataset' || activeTab.getAttribute('data-tab') === 'mlops')) {
+      // simulate tab switch click
+      const predictNavBtn = document.getElementById('nav-predict');
+      if (predictNavBtn) predictNavBtn.click();
+    }
+    
+    const fedCard = document.getElementById('federated-card');
+    if (fedCard) fedCard.style.display = "none";
+    
+    showToast("Switched to Student/Teacher View");
+  }
+}
