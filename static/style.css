@@ -902,7 +902,7 @@ body {
   width: 0;
   height: 0;
 }
-.slider {
+.switch-slider {
   position: absolute;
   cursor: pointer;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -910,7 +910,7 @@ body {
   transition: .3s;
   border-radius: 20px;
 }
-.slider:before {
+.switch-slider:before {
   position: absolute;
   content: "";
   height: 14px;
@@ -922,9 +922,9 @@ body {
   border-radius: 50%;
   box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
-.switch input:checked + .slider {
+.switch input:checked + .switch-slider {
   background-color: #007cff;
 }
-.switch input:checked + .slider:before {
+.switch input:checked + .switch-slider:before {
   transform: translateX(20px);
 }
