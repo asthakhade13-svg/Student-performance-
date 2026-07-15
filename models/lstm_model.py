@@ -8,8 +8,28 @@ from sklearn.model_selection import KFold
 from sklearn.metrics import mean_absolute_error, r2_score
 import joblib
 
+def tokenize_text(text, vocab_size=1000):
+    if not text or not isinstance(text, str):
+        return [0]
+    # Clean and split notes
+    words = text.lower().replace('.', ' ').replace(',', ' ').replace('!', ' ').split()
+    if not words:
+        return [0]
+    # Consistent hash tokens maps directly to vocab bounds
+    return [(hash(w) % (vocab_size - 1)) + 1 for w in words]
+
+def prepare_text_tensors(text_list, vocab_size=1000):
+    flat_indices = []
+    offsets = [0]
+    for text in text_list:
+        indices = tokenize_text(text, vocab_size)
+        flat_indices.extend(indices)
+        offsets.append(offsets[-1] + len(indices))
+    offsets.pop()  # Drop last cumulative offset to match batch length
+    return torch.tensor(flat_indices, dtype=torch.long), torch.tensor(offsets, dtype=torch.long)
+
 class StudentTransformerLSTM(nn.Module):
-    def __init__(self, seq_features=7, hidden_dim=16, num_layers=1, nhead=2):
+    def __init__(self, seq_features=7, hidden_dim=16, num_layers=1, nhead=2, vocab_size=1000, text_dim=64):
         super(StudentTransformerLSTM, self).__init__()
         # Bidirectional LSTM to capture future and past context
         self.lstm = nn.LSTM(input_size=seq_features, hidden_size=hidden_dim, num_layers=num_layers, batch_first=True, bidirectional=True)
@@ -30,9 +50,18 @@ class StudentTransformerLSTM(nn.Module):
             nn.Linear(16, 1)
         )
         
-        # Shared layer
+        # Qualitative Counselor Notes Text Embedding bag
+        self.text_embed = nn.EmbeddingBag(num_embeddings=vocab_size, embedding_dim=text_dim, mode='mean', padding_idx=0)
+        
+        # Projection layer to align sequence state dimensions
+        self.context_proj = nn.Linear(hidden_dim * 2, text_dim)
+        
+        # Cross-Modal Attention Layer: Query from Sequence, Key/Value from Text Notes
+        self.cross_attn = nn.MultiheadAttention(embed_dim=text_dim, num_heads=2, batch_first=True)
+        
+        # Shared layer (takes 64-dim fused multimodal representation)
         self.shared_fc = nn.Sequential(
-            nn.Linear(hidden_dim * 2, 16),
+            nn.Linear(text_dim, 16),
             nn.LeakyReLU(0.05)
         )
         
@@ -40,11 +69,11 @@ class StudentTransformerLSTM(nn.Module):
         self.reg_head = nn.Linear(16, 1)
         self.clf_head = nn.Linear(16, 3)
         
-    def forward(self, x):
+    def forward(self, x, text_indices=None, text_offsets=None):
         # x shape: [batch, 4, 7]
         lstm_out, _ = self.lstm(x)  # shape: [batch, 4, hidden_dim * 2] (32)
         
-        # Transformer Multi-Head Attention self-attention
+        # Transformer Multi-Head Self-Attention
         trans_out = self.transformer_layer(lstm_out)  # shape: [batch, 4, 32]
         
         # Temporal attention pooling
@@ -53,7 +82,26 @@ class StudentTransformerLSTM(nn.Module):
         
         context_vector = torch.sum(trans_out * attn_weights, dim=1)  # shape: [batch, 32]
         
-        shared_out = self.shared_fc(context_vector)
+        # Project sequence context to text dimension
+        # q shape: [batch, 1, 64]
+        q = self.context_proj(context_vector).unsqueeze(1)
+        
+        # Retrieve counselor text embeddings
+        if text_indices is None:
+            # Fallback to pad token representations for backwards compatibility
+            text_indices = torch.tensor([0] * x.size(0), dtype=torch.long, device=x.device)
+            text_offsets = torch.arange(x.size(0), dtype=torch.long, device=x.device)
+            
+        text_emb = self.text_embed(text_indices, text_offsets).unsqueeze(1)  # shape: [batch, 1, 64]
+        
+        # Cross-Modal Attention Fusion (Sequence Query learns from Counselor notes Key/Value)
+        # attn_out shape: [batch, 1, 64]
+        attn_out, _ = self.cross_attn(q, text_emb, text_emb)
+        
+        # Residual fusion
+        fused_vector = (q + attn_out).squeeze(1)  # shape: [batch, 64]
+        
+        shared_out = self.shared_fc(fused_vector)
         reg_out = self.reg_head(shared_out)
         clf_out = self.clf_head(shared_out)
         
@@ -105,6 +153,9 @@ def train_pytorch_model(df, model_path):
     scaler_y = StandardScaler()
     y_reg_scaled = scaler_y.fit_transform(y_reg)
     
+    # Extract student counselor text notes
+    notes = df["notes"].values if "notes" in df.columns else [""] * len(df)
+    
     cv = min(5, len(df))
     mae_list = []
     r2_list = []
@@ -116,6 +167,11 @@ def train_pytorch_model(df, model_path):
             yr_tr, yr_val = y_reg_scaled[train_idx], y_reg_scaled[val_idx]
             yc_tr, yc_val = y_clf[train_idx], y_clf[val_idx]
             
+            notes_tr = [notes[i] for i in train_idx]
+            notes_val = [notes[i] for i in val_idx]
+            idx_tr, off_tr = prepare_text_tensors(notes_tr)
+            idx_val, off_val = prepare_text_tensors(notes_val)
+            
             model = StudentTransformerLSTM()
             optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-4)
             reg_criterion = nn.MSELoss()
@@ -124,7 +180,7 @@ def train_pytorch_model(df, model_path):
             model.train()
             for epoch in range(250):
                 optimizer.zero_grad()
-                pred_reg, pred_clf, _ = model(torch.tensor(s_tr, dtype=torch.float32))
+                pred_reg, pred_clf, _ = model(torch.tensor(s_tr, dtype=torch.float32), idx_tr, off_tr)
                 loss_reg = reg_criterion(pred_reg, torch.tensor(yr_tr, dtype=torch.float32))
                 loss_clf = clf_criterion(pred_clf, torch.tensor(yc_tr, dtype=torch.long))
                 loss = loss_reg + 1.0 * loss_clf
@@ -133,7 +189,7 @@ def train_pytorch_model(df, model_path):
                 
             model.eval()
             with torch.no_grad():
-                pred_reg_val, pred_clf_val, _ = model(torch.tensor(s_val, dtype=torch.float32))
+                pred_reg_val, pred_clf_val, _ = model(torch.tensor(s_val, dtype=torch.float32), idx_val, off_val)
                 
                 pred_reg_val_unscaled = scaler_y.inverse_transform(pred_reg_val.numpy())
                 yr_val_unscaled = scaler_y.inverse_transform(yr_val)
@@ -154,10 +210,12 @@ def train_pytorch_model(df, model_path):
     reg_criterion = nn.MSELoss()
     clf_criterion = nn.CrossEntropyLoss()
     
+    idx_all, off_all = prepare_text_tensors(notes)
+    
     final_model.train()
     for epoch in range(250):
         optimizer.zero_grad()
-        pred_reg, pred_clf, _ = final_model(torch.tensor(seq_data_scaled, dtype=torch.float32))
+        pred_reg, pred_clf, _ = final_model(torch.tensor(seq_data_scaled, dtype=torch.float32), idx_all, off_all)
         loss_reg = reg_criterion(pred_reg, torch.tensor(y_reg_scaled, dtype=torch.float32))
         loss_clf = clf_criterion(pred_clf, torch.tensor(y_clf, dtype=torch.long))
         loss = loss_reg + 1.0 * loss_clf

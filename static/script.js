@@ -58,7 +58,8 @@ async function runPrediction() {
   const payload = {
     student_id:     (document.getElementById('student_id').value || '').trim() || 'default_student',
     attendance:     parseFloat(document.getElementById('attendance').value),
-    previous_marks: parseFloat(document.getElementById('previous_marks').value)
+    previous_marks: parseFloat(document.getElementById('previous_marks').value),
+    notes:          (document.getElementById('notes') ? document.getElementById('notes').value : '')
   };
   for (let w = 1; w <= 4; w++) {
     payload[`study_hours_w${w}`] =           parseFloat(document.getElementById(`study_hours_w${w}`).value) || 0;
@@ -550,6 +551,7 @@ function renderTable(rows) {
       <td>${r.lms_logins_w4 !== undefined ? r.lms_logins_w4 : (r.lms_logins || 30)}</td>
       <td>${r.mock_exams_w4 !== undefined ? r.mock_exams_w4 : (r.mock_exams || r.previous_marks || 70)}</td>
       <td class="score-cell">${r.final_score}</td>
+      <td style="font-size:0.75rem; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${r.notes || ''}">${r.notes || '—'}</td>
       <td><button class="delete-btn" onclick="deleteStudent(${i})">🗑 Delete</button></td>
     </tr>
   `).join('');
@@ -575,6 +577,11 @@ async function addStudent() {
   const schoolEl = document.getElementById('add-school');
   if (schoolEl) {
     payload.school_id = schoolEl.value;
+  }
+  
+  const notesEl = document.getElementById('add-notes');
+  if (notesEl) {
+    payload.notes = notesEl.value || '';
   }
 
   try {

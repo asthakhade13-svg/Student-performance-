@@ -77,7 +77,29 @@ def generate_default_sequence_data():
         data[f"assignments_completed_w{w}"] = [int(max(0, min(10, b * (w / 4.0)))) for b in assign_base]
         data[f"mock_exams_w{w}"] = [round(max(0.0, min(100.0, b * (0.95 + 0.02 * w))), 1) for b in mock_base]
         
+    default_notes = [
+        "Needs academic support, low mock exam marks and attendance.",
+        "Consistent performer, show steady improvements weekly.",
+        "Excellent attention to assignments, sleep patterns are stable.",
+        "Outstanding student, active participant in class discussions.",
+        "Critical alert: high burnout risk, extremely low sleep hours logged.",
+        "Strong assignment completion, maintains high attendance.",
+        "Top of the class, demonstrates solid mastery of concepts.",
+        "Inconsistent study hours. Missed two assignments in week 3.",
+        "Brilliant performance across all metrics, highly motivated.",
+        "Average score predictions, attendance needs a slight boost.",
+        "Good progress. Demonstrates strong LMS interaction.",
+        "Active LMS participation, steady previous marks.",
+        "High burnout warning: student exhibits low sleep patterns.",
+        "Solid coursework completion, very high final scores expected.",
+        "Exhibits great quiz retention, attendance remains stable.",
+        "Low mock exams focus, needs assignment review warnings.",
+        "Demonstrates solid temporal improvement trends.",
+        "Needs study pattern revision, low study hours noted."
+    ]
+    
     data["final_score"] = final_score
+    data["notes"] = default_notes
     return data
 
 def init_sqlite_db():
@@ -86,17 +108,19 @@ def init_sqlite_db():
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='student_data'")
     table_exists = cursor.fetchone()
     
-    if not table_exists:
-        df = None
-        if os.path.exists(CSV_PATH):
-            try:
-                df = pd.read_csv(CSV_PATH)
-            except Exception:
-                pass
-        if df is None or len(df) == 0 or "study_hours_w1" not in df.columns:
-            df = pd.DataFrame(generate_default_sequence_data())
+    upgrade_needed = False
+    if table_exists:
+        cursor.execute("PRAGMA table_info(student_data)")
+        cols = [col[1] for col in cursor.fetchall()]
+        if "notes" not in cols:
+            upgrade_needed = True
             
+    if not table_exists or upgrade_needed:
+        df = pd.DataFrame(generate_default_sequence_data())
         df.to_sql("student_data", conn, if_exists="replace", index=False)
+        conn.commit()
+        for school in ["alpha", "beta", "gamma"]:
+            cursor.execute(f"DROP TABLE IF EXISTS student_data_{school}")
         conn.commit()
         
     for school in ["alpha", "beta", "gamma"]:
@@ -338,11 +362,33 @@ def predict():
         seq_val_scaled = scaler_x.transform(seq_val_flat).reshape(N_val, T_val, F_val)
         
         student_id = data.get('student_id', 'default_student').strip() or 'default_student'
+        notes_text = data.get('notes', '').strip()
+        
+        # Qualitative lexicon sentiment analyzer for predictable model shifts
+        POSITIVE_KEYWORDS = ["excellent", "outstanding", "brilliant", "progress", "motivated", "active", "consistent", "good", "strong", "great", "stable", "high"]
+        NEGATIVE_KEYWORDS = ["struggle", "dropout", "disengaged", "burnout", "alert", "missed", "low", "poor", "warning", "critical", "deprivation"]
+        
+        def get_lexicon_sentiment(text):
+            if not text:
+                return 0.0
+            tokens = text.lower().replace('.', ' ').replace(',', ' ').split()
+            score = 0.0
+            for w in tokens:
+                if any(kw in w for kw in POSITIVE_KEYWORDS):
+                    score += 1.0
+                elif any(kw in w for kw in NEGATIVE_KEYWORDS):
+                    score -= 1.0
+            return max(-3.0, min(3.0, score))
+            
+        sentiment_shift = get_lexicon_sentiment(notes_text) * 1.5
+        
+        from models.lstm_model import prepare_text_tensors
+        idx_tensor, off_tensor = prepare_text_tensors([notes_text])
         
         with torch.no_grad():
-            pred_reg, pred_clf, attn_weights = model(torch.tensor(seq_val_scaled, dtype=torch.float32))
+            pred_reg, pred_clf, attn_weights = model(torch.tensor(seq_val_scaled, dtype=torch.float32), idx_tensor, off_tensor)
             reg_unscaled = scaler_y.inverse_transform(pred_reg.numpy())
-            global_predicted_score = round(float(reg_unscaled[0][0]), 2)
+            global_predicted_score = round(float(reg_unscaled[0][0]) + sentiment_shift, 2)
             global_predicted_score = max(0.0, min(100.0, global_predicted_score))
             
             # Map burnout risk levels
@@ -357,9 +403,9 @@ def predict():
             # Apply meta-learning student-specific neural layer personalization
             has_personalization = apply_personalization(model, student_id)
             if has_personalization:
-                pred_reg_pers, _, _ = model(torch.tensor(seq_val_scaled, dtype=torch.float32))
+                pred_reg_pers, _, _ = model(torch.tensor(seq_val_scaled, dtype=torch.float32), idx_tensor, off_tensor)
                 reg_pers_unscaled = scaler_y.inverse_transform(pred_reg_pers.numpy())
-                predicted_score = round(float(reg_pers_unscaled[0][0]), 2)
+                predicted_score = round(float(reg_pers_unscaled[0][0]) + sentiment_shift, 2)
                 predicted_score = max(0.0, min(100.0, predicted_score))
             else:
                 predicted_score = global_predicted_score
@@ -378,10 +424,13 @@ def predict():
             seq_flat_t = seq.reshape(-1, F_t)
             seq_scaled = scaler_x.transform(seq_flat_t).reshape(N_t, T_t, F_t)
             
+            notes_list = [notes_text] * N_t
+            idx_temp, off_temp = prepare_text_tensors(notes_list)
+            
             with torch.no_grad():
-                preds_tensor, _, _ = model(torch.tensor(seq_scaled, dtype=torch.float32))
+                preds_tensor, _, _ = model(torch.tensor(seq_scaled, dtype=torch.float32), idx_temp, off_temp)
                 preds_unscaled = scaler_y.inverse_transform(preds_tensor.numpy())
-            return preds_unscaled.flatten()
+            return (preds_unscaled.flatten() + sentiment_shift)
             
         background = X_all
         explainer = shap.KernelExplainer(shap_predict_fn, background)
@@ -455,7 +504,8 @@ def add_student():
         df = load_or_create_data()
         new_row = {
             "attendance": float(data['attendance']),
-            "previous_marks": float(data['previous_marks'])
+            "previous_marks": float(data['previous_marks']),
+            "notes": data.get("notes", "").strip()
         }
         for w in range(1, 5):
             new_row[f"study_hours_w{w}"] = float(data[f"study_hours_w{w}"])

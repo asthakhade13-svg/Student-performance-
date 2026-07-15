@@ -85,6 +85,13 @@
                 <input type="text" id="student_id" value="default_student" class="table-input" style="max-width: 100%; text-align: left; padding: 8px 12px; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(0,0,0,0.12); font-weight: 600;" />
               </div>
               
+              <div class="field-group" style="margin-bottom: 16px;">
+                <div class="field-label">
+                  <label for="notes">Counselor Observational Notes</label>
+                </div>
+                <textarea id="notes" rows="2" class="table-input" style="max-width: 100%; width: 100%; text-align: left; padding: 8px 12px; font-size: 0.8rem; border-radius: 8px; border: 1px solid rgba(0,0,0,0.12); font-weight: 500; font-family: inherit; resize: vertical;" placeholder="Type behavioral or counselor observations here..."></textarea>
+              </div>
+              
               <div class="field-group">
                 <div class="field-label">
                   <label for="attendance">Attendance (%)</label>
@@ -343,6 +350,12 @@
                 </select>
               </div>
             </div>
+            <div class="input-row">
+              <div class="input-group" style="width: 100%; margin-bottom: 12px;">
+                <label>Counselor Observational Notes</label>
+                <textarea id="add-notes" rows="2" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.15); font-family: inherit; font-size: 0.8rem; resize: vertical;" placeholder="Add qualitative observations..."></textarea>
+              </div>
+            </div>
             <button class="add-btn" onclick="addStudent()">
               <span>Add Student Record</span>
             </button>
@@ -372,11 +385,12 @@
                   <th>LMS Logins</th>
                   <th>Mock Exam</th>
                   <th>Final Score</th>
+                  <th>Counselor Notes</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody id="table-body">
-                <tr><td colspan="10" class="loading-row">Loading data…</td></tr>
+                <tr><td colspan="11" class="loading-row">Loading data…</td></tr>
               </tbody>
             </table>
           </div>

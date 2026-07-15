@@ -47,6 +47,22 @@ def train_personalized_head(model, seq_x, actual_score, scaler_y, student_id):
     target_tensor = torch.tensor([[target_scaled]], dtype=torch.float32)
     input_tensor = torch.tensor(seq_x, dtype=torch.float32)
     
+    # Load notes from database for multimodal consistency
+    import sqlite3
+    from models.lstm_model import prepare_text_tensors
+    conn = sqlite3.connect(os.path.join("models", "student_records.db"))
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT notes FROM student_data WHERE student_id = ? LIMIT 1", (student_id,))
+        row = cursor.fetchone()
+        notes_text = row[0] if row else ""
+    except Exception:
+        notes_text = ""
+    finally:
+        conn.close()
+        
+    idx_tensor, off_tensor = prepare_text_tensors([notes_text])
+    
     # Optimizer for reg_head only
     optimizer = torch.optim.Adam(model.reg_head.parameters(), lr=0.002)
     criterion = torch.nn.MSELoss()
@@ -55,7 +71,7 @@ def train_personalized_head(model, seq_x, actual_score, scaler_y, student_id):
     # 15 epochs of online gradient descent step tuning
     for epoch in range(15):
         optimizer.zero_grad()
-        pred_reg, _, _ = model(input_tensor)
+        pred_reg, _, _ = model(input_tensor, idx_tensor, off_tensor)
         loss = criterion(pred_reg, target_tensor)
         loss.backward()
         optimizer.step()
