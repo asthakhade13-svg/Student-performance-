@@ -1109,6 +1109,11 @@ function toggleAdminMode() {
     const fedCard = document.getElementById('federated-card');
     if (fedCard) fedCard.style.display = "block";
     
+    const biasRow = document.getElementById('bias-row');
+    if (biasRow) biasRow.style.display = "flex";
+    const persCard = document.getElementById('personalization-card');
+    if (persCard) persCard.style.display = "block";
+    
     showToast("Switched to Admin MLOps Portal");
   } else {
     if (label) {
@@ -1130,6 +1135,11 @@ function toggleAdminMode() {
     
     const fedCard = document.getElementById('federated-card');
     if (fedCard) fedCard.style.display = "none";
+    
+    const biasRow = document.getElementById('bias-row');
+    if (biasRow) biasRow.style.display = "none";
+    const persCard = document.getElementById('personalization-card');
+    if (persCard) persCard.style.display = "none";
     
     showToast("Switched to Student/Teacher View");
   }
