@@ -232,10 +232,11 @@ function showResult(data) {
     biasEl.textContent = `${sign}${biasVal.toFixed(2)}`;
   }
   
-  // Update Uncertainty Stats
+  // Update Uncertainty Stats (visible in Admin view only)
   const boundsEl = document.getElementById('score-bounds');
   if (boundsEl) {
-    if (data.uncertainty !== undefined) {
+    const isChecked = document.getElementById('admin-mode-toggle') ? document.getElementById('admin-mode-toggle').checked : false;
+    if (data.uncertainty !== undefined && isChecked) {
       boundsEl.textContent = `/ 100 (± ${data.uncertainty.toFixed(2)})`;
     } else {
       boundsEl.textContent = `/ 100`;
@@ -1142,6 +1143,13 @@ function toggleAdminMode() {
     if (biasRow) biasRow.style.display = "flex";
     const persCard = document.getElementById('personalization-card');
     if (persCard) persCard.style.display = "block";
+    const confRow = document.getElementById('confidence-row');
+    if (confRow) confRow.style.display = "flex";
+    
+    const boundsEl = document.getElementById('score-bounds');
+    if (boundsEl && lastPredictionResult && lastPredictionResult.uncertainty !== undefined) {
+      boundsEl.textContent = `/ 100 (± ${lastPredictionResult.uncertainty.toFixed(2)})`;
+    }
     
     showToast("Switched to Admin MLOps Portal");
     loadActiveLearningQueue();
@@ -1170,6 +1178,13 @@ function toggleAdminMode() {
     if (biasRow) biasRow.style.display = "none";
     const persCard = document.getElementById('personalization-card');
     if (persCard) persCard.style.display = "none";
+    const confRow = document.getElementById('confidence-row');
+    if (confRow) confRow.style.display = "none";
+    
+    const boundsEl = document.getElementById('score-bounds');
+    if (boundsEl) {
+      boundsEl.textContent = `/ 100`;
+    }
     
     showToast("Switched to Student/Teacher View");
   }
