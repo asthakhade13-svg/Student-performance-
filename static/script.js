@@ -231,6 +231,34 @@ function showResult(data) {
     const sign = biasVal >= 0 ? '+' : '';
     biasEl.textContent = `${sign}${biasVal.toFixed(2)}`;
   }
+  
+  // Update Uncertainty Stats
+  const boundsEl = document.getElementById('score-bounds');
+  if (boundsEl) {
+    if (data.uncertainty !== undefined) {
+      boundsEl.textContent = `/ 100 (± ${data.uncertainty.toFixed(2)})`;
+    } else {
+      boundsEl.textContent = `/ 100`;
+    }
+  }
+
+  const confBadge = document.getElementById('confidence-badge');
+  if (confBadge && data.uncertainty !== undefined) {
+    const u = data.uncertainty;
+    if (u < 1.0) {
+      confBadge.textContent = `High (σ = ${u.toFixed(2)})`;
+      confBadge.style.background = 'rgba(34, 197, 94, 0.1)';
+      confBadge.style.color = '#22c55e';
+    } else if (u < 2.0) {
+      confBadge.textContent = `Medium (σ = ${u.toFixed(2)})`;
+      confBadge.style.background = 'rgba(234, 179, 8, 0.1)';
+      confBadge.style.color = '#eab308';
+    } else {
+      confBadge.textContent = `Low / Active Query (σ = ${u.toFixed(2)})`;
+      confBadge.style.background = 'rgba(239, 68, 68, 0.1)';
+      confBadge.style.color = '#ef4444';
+    }
+  }
 
   // Bind Log Grade feedback submit
   const submitBtn = document.getElementById('submit-feedback-btn');
@@ -735,13 +763,14 @@ async function fetchActiveModelVersion() {
 
 async function loadMLOps() {
   const tbody = document.getElementById('mlops-history-body');
-  tbody.innerHTML = '<tr><td colspan="7" class="loading-row">Loading registry runs…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="6" class="loading-row">Loading registry runs…</td></tr>';
   
   try {
     const res  = await fetch('/api/mlops/history');
     const data = await res.json();
     if (data.success) {
       renderMLOpsDashboard(data);
+      loadActiveLearningQueue();
     } else {
       showToast('Failed to load MLOps: ' + data.error);
     }
@@ -1115,6 +1144,7 @@ function toggleAdminMode() {
     if (persCard) persCard.style.display = "block";
     
     showToast("Switched to Admin MLOps Portal");
+    loadActiveLearningQueue();
   } else {
     if (label) {
       label.textContent = "User View";
@@ -1142,5 +1172,86 @@ function toggleAdminMode() {
     if (persCard) persCard.style.display = "none";
     
     showToast("Switched to Student/Teacher View");
+  }
+}
+
+async function loadActiveLearningQueue() {
+  const tbody = document.getElementById('al-queue-body');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="8" class="loading-row">Calculating cohort uncertainty bounds...</td></tr>';
+  
+  try {
+    const res = await fetch('/api/active-learning-queue');
+    const data = await res.json();
+    if (data.success) {
+      if (data.queue.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="loading-row">No student records found in database.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.queue.map(row => {
+        const u = row.uncertainty;
+        let priorityClass = 'risk-low';
+        if (row.priority === 'High') priorityClass = 'risk-high';
+        else if (row.priority === 'Medium') priorityClass = 'risk-medium';
+        
+        return `
+          <tr>
+            <td style="font-weight: 700; color: var(--text);">${row.student_id}</td>
+            <td>${row.attendance}%</td>
+            <td>${row.previous_marks}</td>
+            <td style="font-size: 0.75rem; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${row.notes || ''}">${row.notes || '—'}</td>
+            <td style="font-weight: 600;">${row.predicted_score.toFixed(2)}</td>
+            <td style="font-weight: 700; font-family: monospace; color: var(--primary);">± ${u.toFixed(2)}</td>
+            <td><span class="burnout-badge ${priorityClass}">${row.priority}</span></td>
+            <td>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <input type="number" min="0" max="100" placeholder="Actual" class="table-input" id="al-input-${row.student_id}" style="max-width: 70px; padding: 6px; font-size: 0.75rem; border-radius: 6px; border: 1px solid rgba(0,0,0,0.15);" />
+                <button class="btn" onclick="submitActiveLearningFeedback('${row.student_id}')" style="padding: 6px 12px; font-size: 0.75rem; border-radius: 6px; background: var(--primary); color: white; border: none; font-weight: 700; cursor: pointer; width: auto;">Log</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    } else {
+      tbody.innerHTML = `<tr><td colspan="8" class="loading-row" style="color:#ef4444">Error: ${data.error}</td></tr>`;
+    }
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="8" class="loading-row">Failed to fetch active learning queue.</td></tr>';
+  }
+}
+
+async function submitActiveLearningFeedback(studentId) {
+  const inputEl = document.getElementById(`al-input-${studentId}`);
+  if (!inputEl) return;
+  
+  const scoreVal = parseFloat(inputEl.value);
+  if (isNaN(scoreVal) || scoreVal < 0 || scoreVal > 100) {
+    showToast('Please enter a valid actual score between 0 and 100.');
+    return;
+  }
+  
+  const btnEl = inputEl.nextElementSibling;
+  btnEl.disabled = true;
+  btnEl.textContent = 'Logging...';
+  
+  try {
+    const res = await fetch('/api/log-feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student_id: studentId, actual_score: scoreVal })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`Logged feedback for ${studentId}. Fine-tuned personalized layer!`);
+      loadActiveLearningQueue();
+    } else {
+      showToast('Error logging feedback: ' + data.error);
+      btnEl.disabled = false;
+      btnEl.textContent = 'Log';
+    }
+  } catch (e) {
+    showToast('Failed to connect to server feedback API.');
+    btnEl.disabled = false;
+    btnEl.textContent = 'Log';
   }
 }

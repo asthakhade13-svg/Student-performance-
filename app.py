@@ -327,6 +327,21 @@ def static_files(filename):
     return send_from_directory('static', filename)
 
 
+def predict_with_uncertainty(model, seq_scaled, idx_tensor, off_tensor, scaler_y, sentiment_shift, num_samples=30):
+    model.train() # Enable MC Dropout
+    preds = []
+    for _ in range(num_samples):
+        with torch.no_grad():
+            pred_reg, _, _ = model(torch.tensor(seq_scaled, dtype=torch.float32), idx_tensor, off_tensor)
+            reg_unscaled = scaler_y.inverse_transform(pred_reg.numpy())
+            score = float(reg_unscaled[0][0]) + sentiment_shift
+            preds.append(max(0.0, min(100.0, score)))
+    model.eval() # Restore evaluation mode
+    mean_val = float(np.mean(preds))
+    std_val = float(np.std(preds)) * 6.0 # Scale to map dropout variance to realistic marks bounds
+    return round(mean_val, 2), max(0.1, round(std_val, 2))
+
+
 @app.route('/api/predict', methods=['POST'])
 def predict():
     try:
@@ -412,6 +427,9 @@ def predict():
                 
             bias = round(predicted_score - global_predicted_score, 2)
             
+        # Compute Monte Carlo Dropout prediction uncertainty
+        _, uncertainty = predict_with_uncertainty(model, seq_val_scaled, idx_tensor, off_tensor, scaler_y, sentiment_shift)
+            
         # Calculate SHAP explanations
         import shap
         df = load_or_create_data()
@@ -466,6 +484,7 @@ def predict():
             "success": True,
             "predicted_score": predicted_score,
             "global_predicted_score": global_predicted_score,
+            "uncertainty": uncertainty,
             "personalization_bias": bias,
             "grade": grade,
             "grade_class": grade_class,
@@ -487,6 +506,76 @@ def get_dataset():
         df = load_or_create_data()
         records = df.to_dict(orient='records')
         return jsonify({"success": True, "data": records, "total": len(records)})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route('/api/active-learning-queue', methods=['GET'])
+def active_learning_queue():
+    try:
+        model, scaler_x, scaler_y, mae, r2, active_ver = get_model_and_stats()
+        df = load_or_create_data()
+        if len(df) == 0:
+            return jsonify({"success": True, "queue": []})
+            
+        queue_records = []
+        from models.lstm_model import get_seq_and_static_data, prepare_text_tensors
+        from models.personalization_manager import apply_personalization
+        import copy
+        from models.lstm_model import StudentTransformerLSTM
+        
+        for idx, row in df.iterrows():
+            student_id = row.get("student_id", f"student_{idx}")
+            if not student_id or not isinstance(student_id, str):
+                student_id = f"student_{idx}"
+                
+            student_df = pd.DataFrame([row])
+            seq, _, _ = get_seq_and_static_data(student_df)
+            N, T, F = seq.shape
+            seq_flat = seq.reshape(-1, F)
+            seq_scaled = scaler_x.transform(seq_flat).reshape(N, T, F)
+            
+            notes_text = row.get("notes", "")
+            if not isinstance(notes_text, str):
+                notes_text = ""
+                
+            idx_tensor, off_tensor = prepare_text_tensors([notes_text])
+            
+            POSITIVE_KEYWORDS = ["excellent", "outstanding", "brilliant", "progress", "motivated", "active", "consistent", "good", "strong", "great", "stable", "high"]
+            NEGATIVE_KEYWORDS = ["struggle", "dropout", "disengaged", "burnout", "alert", "missed", "low", "poor", "warning", "critical", "deprivation"]
+            
+            def get_lexicon_sentiment(text):
+                if not text:
+                    return 0.0
+                tokens = text.lower().replace('.', ' ').replace(',', ' ').split()
+                score = 0.0
+                for w in tokens:
+                    if any(kw in w for kw in POSITIVE_KEYWORDS):
+                        score += 1.0
+                    elif any(kw in w for kw in NEGATIVE_KEYWORDS):
+                        score -= 1.0
+                return max(-3.0, min(3.0, score))
+                
+            sentiment_shift = get_lexicon_sentiment(notes_text) * 1.5
+            
+            local_model = StudentTransformerLSTM()
+            local_model.load_state_dict(model.state_dict())
+            apply_personalization(local_model, student_id)
+            
+            mean_score, std_dev = predict_with_uncertainty(local_model, seq_scaled, idx_tensor, off_tensor, scaler_y, sentiment_shift, num_samples=15)
+            
+            queue_records.append({
+                "student_id": student_id,
+                "predicted_score": mean_score,
+                "uncertainty": std_dev,
+                "attendance": float(row.get("attendance", 80.0)),
+                "previous_marks": float(row.get("previous_marks", 70.0)),
+                "notes": notes_text,
+                "priority": "High" if std_dev >= 2.0 else ("Medium" if std_dev >= 1.0 else "Low")
+            })
+            
+        queue_records = sorted(queue_records, key=lambda x: x["uncertainty"], reverse=True)
+        return jsonify({"success": True, "queue": queue_records})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
 

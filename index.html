@@ -192,7 +192,7 @@
               </svg>
               <div class="score-center">
                 <div class="score-number" id="score-display">0</div>
-                <div class="score-label">/ 100</div>
+                <div class="score-label" id="score-bounds">/ 100</div>
                 <div class="grade-badge" id="grade-badge">-</div>
               </div>
             </div>
@@ -207,6 +207,10 @@
               <div class="stat-row">
                 <span class="stat-label">Burnout Risk</span>
                 <span class="burnout-badge" id="burnout-badge">-</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Model Confidence</span>
+                <span id="confidence-badge" style="font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: rgba(0,0,0,0.05); color: var(--text);">—</span>
               </div>
               <div class="stat-row" id="bias-row" style="display: none;">
                 <span class="stat-label">Personalized Bias</span>
@@ -621,6 +625,37 @@
               </thead>
               <tbody id="mlops-history-body">
                 <tr><td colspan="6" class="loading-row">Loading run logs…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        <!-- Active Learning Query Queue -->
+        <div class="card registry-table-card" style="grid-column: span 2; margin-top: 20px;">
+          <div class="table-header">
+            <div>
+              <h2 style="display: flex; align-items: center; gap: 8px;">
+                <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #e02424; animation: pulse 2s infinite;"></span>
+                Active Learning Query Queue (Uncertainty Sampling)
+              </h2>
+              <p class="record-count">Model requests actual grade feedback on profiles where prediction variance is highest</p>
+            </div>
+            <button class="refresh-btn" onclick="loadActiveLearningQueue()">Refresh Queue</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Student ID</th>
+                  <th>Attendance</th>
+                  <th>Prev. Marks</th>
+                  <th>Counselor Notes</th>
+                  <th>Predicted Score</th>
+                  <th>Uncertainty (σ)</th>
+                  <th>Priority</th>
+                  <th style="min-width: 180px;">Log Actual Grade</th>
+                </tr>
+              </thead>
+              <tbody id="al-queue-body">
+                <tr><td colspan="8" class="loading-row">Calculating cohort uncertainty bounds...</td></tr>
               </tbody>
             </table>
           </div>
