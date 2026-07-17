@@ -92,6 +92,11 @@
                 <textarea id="notes" rows="2" class="table-input" style="max-width: 100%; width: 100%; text-align: left; padding: 8px 12px; font-size: 0.8rem; border-radius: 8px; border: 1px solid rgba(0,0,0,0.12); font-weight: 500; font-family: inherit; resize: vertical;" placeholder="Type behavioral or counselor observations here..."></textarea>
               </div>
               
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 20px;">
+                <input type="checkbox" id="zero_shot_toggle" style="width: 16px; height: 16px; cursor: pointer;" />
+                <label for="zero_shot_toggle" style="font-size: 0.8rem; font-weight: 700; color: var(--text); cursor: pointer;">New Student Profile (Zero-Shot / No History)</label>
+              </div>
+              
               <div class="field-group">
                 <div class="field-label">
                   <label for="attendance">Attendance (%)</label>
@@ -215,6 +220,10 @@
               <div class="stat-row" id="bias-row" style="display: none;">
                 <span class="stat-label">Personalized Bias</span>
                 <span id="personalization-bias" style="font-weight: 700; color: var(--primary);">0.00</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Profile Adaptation</span>
+                <span id="adaptation-badge" style="font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: rgba(0, 124, 255, 0.08); color: #007cff;">Standard Cohort Baseline</span>
               </div>
             </div>
 

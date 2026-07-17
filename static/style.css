@@ -928,3 +928,11 @@ body {
 .switch input:checked + .switch-slider:before {
   transform: translateX(20px);
 }
+
+/* Dimmed section for Zero-Shot Profile Adaptation */
+.disabled-section {
+  opacity: 0.35;
+  pointer-events: none;
+  filter: grayscale(0.5);
+  transition: all 0.3s ease;
+}

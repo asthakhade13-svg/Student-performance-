@@ -55,11 +55,13 @@ async function runPrediction() {
   btn.classList.add('loading');
   btn.querySelector('span:last-child').textContent = 'Predicting…';
 
+  const zsToggle = document.getElementById('zero_shot_toggle');
   const payload = {
     student_id:     (document.getElementById('student_id').value || '').trim() || 'default_student',
     attendance:     parseFloat(document.getElementById('attendance').value),
     previous_marks: parseFloat(document.getElementById('previous_marks').value),
-    notes:          (document.getElementById('notes') ? document.getElementById('notes').value : '')
+    notes:          (document.getElementById('notes') ? document.getElementById('notes').value : ''),
+    zero_shot:      zsToggle ? zsToggle.checked : false
   };
   for (let w = 1; w <= 4; w++) {
     payload[`study_hours_w${w}`] =           parseFloat(document.getElementById(`study_hours_w${w}`).value) || 0;
@@ -230,6 +232,21 @@ function showResult(data) {
     const biasVal = data.personalization_bias || 0.0;
     const sign = biasVal >= 0 ? '+' : '';
     biasEl.textContent = `${sign}${biasVal.toFixed(2)}`;
+  }
+  
+  const adaptBadge = document.getElementById('adaptation-badge');
+  if (adaptBadge && data.profile_status) {
+    adaptBadge.textContent = data.profile_status;
+    if (data.profile_status === "One-Shot (Adapted)") {
+      adaptBadge.style.background = 'rgba(34, 197, 94, 0.08)';
+      adaptBadge.style.color = '#22c55e';
+    } else if (data.profile_status === "Zero-Shot (MAML Baseline)") {
+      adaptBadge.style.background = 'rgba(234, 179, 8, 0.08)';
+      adaptBadge.style.color = '#eab308';
+    } else {
+      adaptBadge.style.background = 'rgba(0, 124, 255, 0.08)';
+      adaptBadge.style.color = '#007cff';
+    }
   }
   
   // Update Uncertainty Stats (visible in Admin view only)
@@ -1060,6 +1077,20 @@ document.addEventListener('DOMContentLoaded', () => {
   bindSliders();
   injectRingGradient();
   fetchActiveModelVersion();
+  
+  const zsToggle = document.getElementById('zero_shot_toggle');
+  if (zsToggle) {
+    zsToggle.addEventListener('change', () => {
+      const weeklyLogs = document.querySelector('.weekly-logs-section');
+      if (weeklyLogs) {
+        if (zsToggle.checked) {
+          weeklyLogs.classList.add('disabled-section');
+        } else {
+          weeklyLogs.classList.remove('disabled-section');
+        }
+      }
+    });
+  }
 });
 
 async function runFederatedTraining() {

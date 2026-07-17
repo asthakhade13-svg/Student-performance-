@@ -170,10 +170,13 @@ def save_registry(registry):
 
 def validate_student_data(data, is_predict=False):
     # Auto-replicate single inputs to weekly inputs to support simple frontend forms
+    is_zs = data.get('zero_shot')
     for feat in ["study_hours", "sleep_hours", "lms_logins", "assignments_completed", "mock_exams"]:
-        if feat in data:
-            for w in range(1, 5):
-                if f"{feat}_w{w}" not in data:
+        for w in range(1, 5):
+            if f"{feat}_w{w}" not in data:
+                if is_zs:
+                    data[f"{feat}_w{w}"] = 0.0
+                elif feat in data:
                     data[f"{feat}_w{w}"] = data[feat]
                     
     try:
@@ -357,16 +360,21 @@ def predict():
         
         model, scaler_x, scaler_y, mae, r2, active_ver = get_model_and_stats()
         
+        is_zs = data.get("zero_shot", False)
+        df_all = load_or_create_data()
+        
         student_data_dict = {
             "attendance": [attendance],
             "previous_marks": [previous_marks]
         }
         for w in range(1, 5):
-            student_data_dict[f"study_hours_w{w}"] = [float(data[f"study_hours_w{w}"])]
-            student_data_dict[f"sleep_hours_w{w}"] = [float(data[f"sleep_hours_w{w}"])]
-            student_data_dict[f"lms_logins_w{w}"] = [float(data[f"lms_logins_w{w}"])]
-            student_data_dict[f"assignments_completed_w{w}"] = [float(data[f"assignments_completed_w{w}"])]
-            student_data_dict[f"mock_exams_w{w}"] = [float(data[f"mock_exams_w{w}"])]
+            for feat in ["study_hours", "sleep_hours", "lms_logins", "assignments_completed", "mock_exams"]:
+                key = f"{feat}_w{w}"
+                if is_zs:
+                    cohort_avg = float(df_all[key].mean()) if len(df_all) > 0 else 5.0
+                    student_data_dict[key] = [cohort_avg]
+                else:
+                    student_data_dict[key] = [float(data[key])]
             
         student_df = pd.DataFrame(student_data_dict)
         student_df = student_df[FEATURE_COLS]
@@ -480,6 +488,15 @@ def predict():
 
         base_value = round(float(explainer.expected_value), 2)
 
+        from models.personalization_manager import load_personalized_heads
+        heads = load_personalized_heads()
+        if student_id in heads:
+            profile_status = "One-Shot (Adapted)"
+        elif is_zs:
+            profile_status = "Zero-Shot (MAML Baseline)"
+        else:
+            profile_status = "Standard Cohort Baseline"
+
         return jsonify({
             "success": True,
             "predicted_score": predicted_score,
@@ -494,7 +511,8 @@ def predict():
             "explanations": explanations,
             "base_value": base_value,
             "burnout_risk": burnout_risk,
-            "attention_weights": attn_list
+            "attention_weights": attn_list,
+            "profile_status": profile_status
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -1017,8 +1035,31 @@ def log_feedback():
         data = request.get_json()
         student_id = data.get('student_id', 'default_student').strip() or 'default_student'
         actual_score = float(data.get('actual_score'))
-        predicted_score = float(data.get('predicted_score'))
-        features = data.get('features', {})
+        
+        # Fallbacks for missing predicted_score and features (e.g. when logging from Active Learning queue or zero-shot scripts)
+        pred_raw = data.get('predicted_score')
+        predicted_score = float(pred_raw) if pred_raw is not None else 75.0
+        
+        features = data.get('features')
+        if not features:
+            df_all = load_or_create_data()
+            match_row = pd.DataFrame()
+            if 'student_id' in df_all.columns:
+                match_row = df_all[df_all['student_id'] == student_id]
+            else:
+                if student_id.startswith('student_'):
+                    try:
+                        idx = int(student_id.split('_')[1])
+                        if 0 <= idx < len(df_all):
+                            match_row = df_all.iloc[[idx]]
+                    except Exception:
+                        pass
+            if len(match_row) > 0:
+                features = match_row.iloc[0].to_dict()
+            else:
+                features = {}
+                for col in FEATURE_COLS:
+                    features[col] = float(df_all[col].mean()) if len(df_all) > 0 else 5.0
         
         # 1. Online Gradient Descent Meta-Learning fine-tuning
         model, scaler_x, scaler_y, mae, r2, active_ver = get_model_and_stats()
