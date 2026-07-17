@@ -1176,6 +1176,8 @@ function toggleAdminMode() {
     if (persCard) persCard.style.display = "block";
     const confRow = document.getElementById('confidence-row');
     if (confRow) confRow.style.display = "flex";
+    const adaptRow = document.getElementById('adaptation-row');
+    if (adaptRow) adaptRow.style.display = "flex";
     
     const boundsEl = document.getElementById('score-bounds');
     if (boundsEl && lastPredictionResult && lastPredictionResult.uncertainty !== undefined) {
@@ -1211,6 +1213,8 @@ function toggleAdminMode() {
     if (persCard) persCard.style.display = "none";
     const confRow = document.getElementById('confidence-row');
     if (confRow) confRow.style.display = "none";
+    const adaptRow = document.getElementById('adaptation-row');
+    if (adaptRow) adaptRow.style.display = "none";
     
     const boundsEl = document.getElementById('score-bounds');
     if (boundsEl) {
