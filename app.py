@@ -318,6 +318,35 @@ def get_model_and_stats():
     return get_model_and_stats()
 
 
+global_rl_agent = None
+
+def initialize_rl_agent():
+    global global_rl_agent
+    try:
+        from models.rl_advisor import train_rl_advisor
+        df_all = load_or_create_data()
+        
+        # Load model and stats once to optimize prediction speed inside the RL training loop
+        model, scaler_x, scaler_y, _, _, _ = get_model_and_stats()
+        model.eval()
+        
+        def predict_state(state):
+            # Layout matching get_seq_and_static_data:
+            # study_hours, sleep_hours, lms_logins, assignments_completed, mock_exams, attendance, previous_marks
+            row_data = np.array([state[2], state[3], state[4], state[5], state[6], state[0], state[1]])
+            seq_data = np.tile(row_data, (4, 1))
+            seq_scaled = scaler_x.transform(seq_data).reshape(1, 4, 7)
+            
+            with torch.no_grad():
+                pred, _, _ = model(torch.tensor(seq_scaled, dtype=torch.float32))
+                score = scaler_y.inverse_transform(pred.numpy())[0][0]
+            return float(score)
+
+        global_rl_agent = train_rl_advisor(df_all, predict_state, epochs=120)
+    except Exception as e:
+        print(f"[RL Initialization] Failed to train DQN agent: {str(e)}")
+
+
 # ── Routes ──────────────────────────────────────────────────────────────
 
 @app.route('/')
@@ -881,6 +910,64 @@ def generate_advice():
         predicted_score = float(data.get('predicted_score', 65.0))
         burnout_risk = data.get('burnout_risk', 'Low')
         explanations = data.get('explanations', [])
+        
+        # Calculate RL Sequential Recommendations
+        rl_markdown = ""
+        enable_rl = data.get('enable_rl', True)
+        try:
+            if enable_rl and global_rl_agent is not None:
+                from models.rl_advisor import ACTIONS, transition_state
+                curr_state = np.array([
+                    attendance, previous_marks, study_hours, sleep_hours, lms_logins, assignments_completed, mock_exams
+                ])
+                
+                model, scaler_x, scaler_y, _, _, _ = get_model_and_stats()
+                model.eval()
+                
+                def local_predict(st):
+                    row_data = np.array([st[2], st[3], st[4], st[5], st[6], st[0], st[1]])
+                    seq_data = np.tile(row_data, (4, 1))
+                    seq_scaled = scaler_x.transform(seq_data).reshape(1, 4, 7)
+                    with torch.no_grad():
+                        pred, _, _ = model(torch.tensor(seq_scaled, dtype=torch.float32))
+                        score = scaler_y.inverse_transform(pred.numpy())[0][0]
+                    return float(score)
+
+                score_t = local_predict(curr_state)
+                rl_timeline = []
+                for week in range(1, 5):
+                    action_idx = global_rl_agent.select_action(curr_state, epsilon=0.0)
+                    act = ACTIONS[action_idx]
+                    next_state = transition_state(curr_state, action_idx)
+                    score_next = local_predict(next_state)
+                    reward = score_next - score_t
+                    
+                    rl_timeline.append({
+                        "week": week,
+                        "action_name": act["name"],
+                        "details": f"Study: {next_state[2]:.1f}h/day, Sleep: {next_state[3]:.1f}h/day, LMS Logins: {int(next_state[4])}/wk",
+                        "predicted_score": round(score_next, 2),
+                        "improvement": round(reward, 2)
+                    })
+                    curr_state = next_state
+                    score_t = score_next
+                
+                if rl_timeline:
+                    rl_markdown = (
+                        "### 🎯 Sequential RL Study Habit Policy Recommendations\n"
+                        "The AI advisor operates as a Sequential Reinforcement Learning agent (Deep Q-Network). "
+                        "Below is the 4-week optimized habit intervention path calculated to maximize cumulative academic gains:\n\n"
+                    )
+                    for step in rl_timeline:
+                        sign = "+" if step["improvement"] >= 0 else ""
+                        rl_markdown += (
+                            f"*   **Week {step['week']} Intervention**: **{step['action_name']}**\n"
+                            f"    *   *Adjusted Habits*: {step['details']}\n"
+                            f"    *   *Projected Grade*: **{step['predicted_score']} / 100** ({sign}{step['improvement']:.2f} marks change)\n"
+                        )
+                    rl_markdown += "\n"
+        except Exception as rl_err:
+            print(f"[RL Advisor API] Trajectory simulation failed: {str(rl_err)}")
 
         # RAG Pipeline: Extract features with negative SHAP impacts
         negative_exps = [e for e in explanations if e.get('impact', 0) < 0]
@@ -986,6 +1073,8 @@ def generate_advice():
                 "2.  **Mistake Journaling**: Track incorrect practice answers and solve them from scratch twice.\n"
                 "3.  **Active Recall**: Verbally summarize what you learned in class without looking at your slides."
             )
+            if rl_markdown:
+                mock_plan = mock_plan + "\n---\n\n" + rl_markdown
             return jsonify({
                 "success": True,
                 "advice": mock_plan,
@@ -1019,6 +1108,8 @@ def generate_advice():
 
         response = model.generate_content(prompt)
         advice_text = response.text
+        if rl_markdown:
+            advice_text = advice_text + "\n---\n\n" + rl_markdown
 
         return jsonify({
             "success": True,
@@ -1119,6 +1210,7 @@ def log_feedback():
 
 if __name__ == '__main__':
     load_or_create_data()
+    initialize_rl_agent()
     app.run(debug=False, port=5000)
 
 

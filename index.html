@@ -278,6 +278,10 @@
             <h3>EduPredict AI Study Advisor</h3>
           </div>
           <p class="ai-description">Get a personalized, data-driven 4-week study planner and target daily habits based on your predicted performance.</p>
+          <div style="display: flex; align-items: center; gap: 8px; margin: 15px 0;">
+            <input type="checkbox" id="rl_advisor_toggle" checked style="width: 16px; height: 16px; cursor: pointer;" />
+            <label for="rl_advisor_toggle" style="font-size: 0.8rem; font-weight: 700; color: var(--text); cursor: pointer;">Enable RL Sequential Habit Optimization</label>
+          </div>
           
           <button class="add-btn ai-generate-btn" id="ai-generate-btn" onclick="generateAISuggestions()">
             <span>Generate AI Coaching Plan</span>

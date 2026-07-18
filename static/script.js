@@ -908,9 +908,11 @@ async function generateAISuggestions() {
   responseText.innerHTML = '';
 
   try {
+    const rlToggle = document.getElementById('rl_advisor_toggle');
     const advicePayload = {
       ...lastPredictionPayload,
-      explanations: lastPredictionResult ? lastPredictionResult.explanations : []
+      explanations: lastPredictionResult ? lastPredictionResult.explanations : [],
+      enable_rl: rlToggle ? rlToggle.checked : true
     };
     const res = await fetch('/api/generate-advice', {
       method: 'POST',
