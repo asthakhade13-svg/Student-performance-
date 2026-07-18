@@ -1181,6 +1181,11 @@ function toggleAdminMode() {
     const adaptRow = document.getElementById('adaptation-row');
     if (adaptRow) adaptRow.style.display = "flex";
     
+    const zsContainer = document.getElementById('zero-shot-toggle-container');
+    if (zsContainer) zsContainer.style.display = "flex";
+    const rlContainer = document.getElementById('rl-advisor-toggle-container');
+    if (rlContainer) rlContainer.style.display = "flex";
+    
     const boundsEl = document.getElementById('score-bounds');
     if (boundsEl && lastPredictionResult && lastPredictionResult.uncertainty !== undefined) {
       boundsEl.textContent = `/ 100 (± ${lastPredictionResult.uncertainty.toFixed(2)})`;
@@ -1217,6 +1222,11 @@ function toggleAdminMode() {
     if (confRow) confRow.style.display = "none";
     const adaptRow = document.getElementById('adaptation-row');
     if (adaptRow) adaptRow.style.display = "none";
+    
+    const zsContainer = document.getElementById('zero-shot-toggle-container');
+    if (zsContainer) zsContainer.style.display = "none";
+    const rlContainer = document.getElementById('rl-advisor-toggle-container');
+    if (rlContainer) rlContainer.style.display = "none";
     
     const boundsEl = document.getElementById('score-bounds');
     if (boundsEl) {

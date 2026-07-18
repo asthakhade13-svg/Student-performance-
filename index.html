@@ -92,7 +92,7 @@
                 <textarea id="notes" rows="2" class="table-input" style="max-width: 100%; width: 100%; text-align: left; padding: 8px 12px; font-size: 0.8rem; border-radius: 8px; border: 1px solid rgba(0,0,0,0.12); font-weight: 500; font-family: inherit; resize: vertical;" placeholder="Type behavioral or counselor observations here..."></textarea>
               </div>
               
-              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 20px;">
+              <div id="zero-shot-toggle-container" style="display: none; align-items: center; gap: 8px; margin-bottom: 20px;">
                 <input type="checkbox" id="zero_shot_toggle" style="width: 16px; height: 16px; cursor: pointer;" />
                 <label for="zero_shot_toggle" style="font-size: 0.8rem; font-weight: 700; color: var(--text); cursor: pointer;">New Student Profile (Zero-Shot / No History)</label>
               </div>
@@ -278,7 +278,7 @@
             <h3>EduPredict AI Study Advisor</h3>
           </div>
           <p class="ai-description">Get a personalized, data-driven 4-week study planner and target daily habits based on your predicted performance.</p>
-          <div style="display: flex; align-items: center; gap: 8px; margin: 15px 0;">
+          <div id="rl-advisor-toggle-container" style="display: none; align-items: center; gap: 8px; margin: 15px 0;">
             <input type="checkbox" id="rl_advisor_toggle" checked style="width: 16px; height: 16px; cursor: pointer;" />
             <label for="rl_advisor_toggle" style="font-size: 0.8rem; font-weight: 700; color: var(--text); cursor: pointer;">Enable RL Sequential Habit Optimization</label>
           </div>
