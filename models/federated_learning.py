@@ -65,15 +65,18 @@ def train_local_model(global_state, df, scaler_x, scaler_y, epochs=10, lr=0.01, 
         loss_clf = clf_criterion(pred_clf, torch.tensor(y_clf, dtype=torch.long))
         loss = loss_reg + 1.0 * loss_clf
         loss.backward()
+        
+        # Differential Privacy: Clip gradients and inject Gaussian noise directly to gradients
+        if noise_scale > 0:
+            nn.utils.clip_grad_norm_(local_model.parameters(), max_norm=1.0)
+            with torch.no_grad():
+                for param in local_model.parameters():
+                    if param.grad is not None:
+                        noise = torch.randn_like(param.grad) * noise_scale
+                        param.grad.add_(noise)
+                        
         optimizer.step()
         
-    # Differential Privacy: Inject minor Gaussian noise to final parameters before averaging
-    if noise_scale > 0:
-        with torch.no_grad():
-            for param in local_model.parameters():
-                noise = torch.randn_like(param) * noise_scale
-                param.add_(noise)
-                
     return local_model.state_dict()
 
 def run_federated_rounds(rounds=3, epochs=10, lr=0.01, noise_scale=0.01):
