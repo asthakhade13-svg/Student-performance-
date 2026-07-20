@@ -62,7 +62,8 @@ class StudentTransformerLSTM(nn.Module):
         # Shared layer (takes 64-dim fused multimodal representation)
         self.shared_fc = nn.Sequential(
             nn.Linear(text_dim, 16),
-            nn.LeakyReLU(0.05)
+            nn.LeakyReLU(0.05),
+            nn.Dropout(p=0.1)
         )
         
         # Heads

@@ -359,8 +359,8 @@ def static_files(filename):
     return send_from_directory('static', filename)
 
 
-def predict_with_uncertainty(model, seq_scaled, idx_tensor, off_tensor, scaler_y, sentiment_shift, num_samples=30):
-    model.train() # Enable MC Dropout
+def predict_with_uncertainty(model, seq_scaled, idx_tensor, off_tensor, scaler_y, sentiment_shift, num_samples=50):
+    model.train() # Enable MC Dropout (Bayesian Neural Network approach)
     preds = []
     for _ in range(num_samples):
         with torch.no_grad():
@@ -371,7 +371,8 @@ def predict_with_uncertainty(model, seq_scaled, idx_tensor, off_tensor, scaler_y
     model.eval() # Restore evaluation mode
     mean_val = float(np.mean(preds))
     std_val = float(np.std(preds)) * 6.0 # Scale to map dropout variance to realistic marks bounds
-    return round(mean_val, 2), max(0.1, round(std_val, 2))
+    variance_val = float(np.var(preds)) * 36.0 # \sigma^2 = \frac{1}{B} \sum_{b=1}^B (\hat{y}_b - \bar{y})^2
+    return round(mean_val, 2), max(0.1, round(std_val, 2)), round(variance_val, 4)
 
 
 @app.route('/api/predict', methods=['POST'])
@@ -465,7 +466,7 @@ def predict():
             bias = round(predicted_score - global_predicted_score, 2)
             
         # Compute Monte Carlo Dropout prediction uncertainty
-        _, uncertainty = predict_with_uncertainty(model, seq_val_scaled, idx_tensor, off_tensor, scaler_y, sentiment_shift)
+        _, uncertainty, variance = predict_with_uncertainty(model, seq_val_scaled, idx_tensor, off_tensor, scaler_y, sentiment_shift, num_samples=50)
             
         # Calculate SHAP explanations
         import shap
@@ -531,6 +532,7 @@ def predict():
             "predicted_score": predicted_score,
             "global_predicted_score": global_predicted_score,
             "uncertainty": uncertainty,
+            "variance": variance,
             "personalization_bias": bias,
             "grade": grade,
             "grade_class": grade_class,
@@ -609,12 +611,13 @@ def active_learning_queue():
             local_model.load_state_dict(model.state_dict())
             apply_personalization(local_model, student_id)
             
-            mean_score, std_dev = predict_with_uncertainty(local_model, seq_scaled, idx_tensor, off_tensor, scaler_y, sentiment_shift, num_samples=15)
+            mean_score, std_dev, variance = predict_with_uncertainty(local_model, seq_scaled, idx_tensor, off_tensor, scaler_y, sentiment_shift, num_samples=50)
             
             queue_records.append({
                 "student_id": student_id,
                 "predicted_score": mean_score,
                 "uncertainty": std_dev,
+                "variance": variance,
                 "attendance": float(row.get("attendance", 80.0)),
                 "previous_marks": float(row.get("previous_marks", 70.0)),
                 "notes": notes_text,

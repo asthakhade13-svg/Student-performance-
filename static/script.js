@@ -1263,7 +1263,7 @@ async function loadActiveLearningQueue() {
             <td>${row.previous_marks}</td>
             <td style="font-size: 0.75rem; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${row.notes || ''}">${row.notes || '—'}</td>
             <td style="font-weight: 600;">${row.predicted_score.toFixed(2)}</td>
-            <td style="font-weight: 700; font-family: monospace; color: var(--primary);">± ${u.toFixed(2)}</td>
+            <td style="font-weight: 700; font-family: monospace; color: var(--primary);">± ${u.toFixed(2)} (σ²=${row.variance !== undefined ? row.variance.toFixed(2) : (u*u).toFixed(2)})</td>
             <td><span class="burnout-badge ${priorityClass}">${row.priority}</span></td>
             <td>
               <div style="display: flex; gap: 8px; align-items: center;">
