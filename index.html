@@ -294,6 +294,23 @@
             </div>
             <div class="ai-response-text" id="ai-response-text"></div>
           </div>
+
+          <!-- Counterfactual Recourse Calculator -->
+          <div id="counterfactual-container" style="margin-top: 20px; padding: 15px; background: rgba(0, 124, 255, 0.04); border: 1px solid rgba(0, 124, 255, 0.12); border-radius: 12px;">
+            <h4 style="font-size: 0.88rem; font-weight: 700; color: var(--primary); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+              <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--primary);"></span>
+              Counterfactual Recourse Calculator (Optimal Habit Shift)
+            </h4>
+            <p style="font-size: 0.72rem; color: var(--muted); margin-bottom: 12px; line-height: 1.3;">Calculate the minimal, actionable study habit modifications required to reach your target exam score.</p>
+            
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+              <label for="target-score-input" style="font-size: 0.75rem; font-weight: 700; color: var(--text);">Target Exam Grade:</label>
+              <input type="number" id="target-score-input" min="50" max="100" value="85" class="table-input" style="max-width: 90px; padding: 6px 10px; font-size: 0.8rem; border-radius: 8px; border: 1px solid rgba(0,0,0,0.15);" />
+              <button onclick="calculateCounterfactualRecourse()" class="btn" style="padding: 6px 14px; font-size: 0.75rem; font-weight: 700; border-radius: 8px; background: var(--primary); color: white; border: none; cursor: pointer;">Calculate Recourse</button>
+            </div>
+            
+            <div id="recourse-results-area" style="margin-top: 12px; display: none;"></div>
+          </div>
         </div>
       </div>
     </section>

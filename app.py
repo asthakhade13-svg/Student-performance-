@@ -840,6 +840,51 @@ def federated_train():
         return jsonify({"success": False, "error": str(e)}), 400
 
 
+@app.route('/api/counterfactual-recourse', methods=['POST'])
+def counterfactual_recourse():
+    try:
+        data = request.get_json() or {}
+        target_score = float(data.get('target_score', 85.0))
+        target_score = max(50.0, min(100.0, target_score))
+        
+        model, scaler_x, scaler_y, mae, r2, active_ver = get_model_and_stats()
+        from models.counterfactual_engine import compute_counterfactual_recourse
+        
+        recourse_result = compute_counterfactual_recourse(
+            model=model,
+            scaler_x=scaler_x,
+            scaler_y=scaler_y,
+            current_features=data,
+            target_score=target_score
+        )
+        return jsonify({"success": True, "recourse": recourse_result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route('/api/contrastive-train', methods=['POST'])
+def contrastive_train():
+    try:
+        from models.contrastive_learning import train_contrastive_pretraining
+        df_all = load_or_create_data()
+        model, scaler_x, scaler_y, mae, r2, active_ver = get_model_and_stats()
+        
+        data = request.get_json() or {}
+        epochs = int(data.get("epochs", 25))
+        
+        success, logs = train_contrastive_pretraining(df_all, model, scaler_x, epochs=epochs)
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "Self-Supervised Contrastive pre-training completed successfully!",
+                "logs": logs
+            })
+        else:
+            return jsonify({"success": False, "error": "Contrastive training failed.", "logs": logs}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
 # ── MLOps Specific Routes ─────────────────────────────────────────────
 
 @app.route('/api/mlops/history', methods=['GET'])

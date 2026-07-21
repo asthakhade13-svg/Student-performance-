@@ -1317,3 +1317,59 @@ async function submitActiveLearningFeedback(studentId) {
     btnEl.textContent = 'Log';
   }
 }
+
+async function calculateCounterfactualRecourse() {
+  if (!lastPredictionPayload) {
+    showToast('Please run a score prediction first.');
+    return;
+  }
+  
+  const targetInput = document.getElementById('target-score-input');
+  const resultsArea = document.getElementById('recourse-results-area');
+  if (!targetInput || !resultsArea) return;
+  
+  const targetScore = parseFloat(targetInput.value);
+  if (isNaN(targetScore) || targetScore < 50 || targetScore > 100) {
+    showToast('Please enter a target score between 50 and 100.');
+    return;
+  }
+  
+  resultsArea.style.display = 'block';
+  resultsArea.innerHTML = '<div style="font-size: 0.78rem; color: var(--muted);">Optimizing recourse gradient path...</div>';
+  
+  try {
+    const payload = {
+      ...lastPredictionPayload,
+      target_score: targetScore
+    };
+    const res = await fetch('/api/counterfactual-recourse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success && data.recourse) {
+      const rec = data.recourse;
+      const actionsHtml = rec.recourse_actions.map(act => `<li style="margin-bottom: 4px; font-size: 0.78rem; color: #007cff; font-weight: 600;">💡 ${act}</li>`).join('');
+      const opt = rec.optimized_metrics;
+      
+      resultsArea.innerHTML = `
+        <div style="background: rgba(0,124,255,0.06); padding: 12px; border-radius: 8px; font-size: 0.8rem; line-height: 1.5; color: var(--text);">
+          <div style="font-weight: 700; color: var(--text); margin-bottom: 6px;">
+            Target Score: <strong>${rec.target_score}</strong> | Projected Achievable Score: <strong style="color: var(--primary);">${rec.projected_score}</strong> (+${rec.score_gain} marks)
+          </div>
+          <div style="font-weight: 700; margin-bottom: 4px; font-size: 0.75rem; color: var(--muted);">Minimal Actionable Recourse Steps:</div>
+          <ul style="margin: 0 0 10px 15px; padding: 0;">${actionsHtml}</ul>
+          <div style="font-size: 0.72rem; color: var(--muted); font-weight: 600;">
+            Target Averages: ${opt.avg_study_hours}h/day study, ${opt.avg_sleep_hours}h/night sleep, ${opt.avg_lms_logins} logins/wk, ${opt.avg_assignments_completed} assignments/mod, ${opt.avg_mock_exams} mock score.
+          </div>
+        </div>
+      `;
+      showToast('Calculated optimal counterfactual habit shift!');
+    } else {
+      resultsArea.innerHTML = `<div style="font-size: 0.78rem; color: #ef4444;">Recourse error: ${data.error}</div>`;
+    }
+  } catch (e) {
+    resultsArea.innerHTML = '<div style="font-size: 0.78rem; color: #ef4444;">Failed to calculate counterfactual recourse.</div>';
+  }
+}
