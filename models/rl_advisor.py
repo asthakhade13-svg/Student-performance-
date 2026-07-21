@@ -70,10 +70,10 @@ class DQNAgent:
             return 0.0
         self.model.train()
         
-        states = torch.tensor([t[0] for t in transitions], dtype=torch.float32)
+        states = torch.tensor(np.array([t[0] for t in transitions]), dtype=torch.float32)
         actions = torch.tensor([t[1] for t in transitions], dtype=torch.long).unsqueeze(1)
         rewards = torch.tensor([t[2] for t in transitions], dtype=torch.float32).unsqueeze(1)
-        next_states = torch.tensor([t[3] for t in transitions], dtype=torch.float32)
+        next_states = torch.tensor(np.array([t[3] for t in transitions]), dtype=torch.float32)
         dones = torch.tensor([t[4] for t in transitions], dtype=torch.float32).unsqueeze(1)
         
         # Current Q
