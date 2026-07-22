@@ -252,6 +252,69 @@
               </div>
             </div>
 
+            <!-- Deep Knowledge Tracing Skill Mastery (Radar Chart) -->
+            <div class="card attention-card" id="dkt-card" style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.45); border: 1px solid rgba(0,0,0,0.05); border-radius: 12px;">
+              <h3 style="font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; color: var(--text);">
+                <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background: #10b981;"></span>
+                DKT Skill Mastery Diagnostics
+              </h3>
+              <p style="font-size: 0.7rem; color: var(--muted); margin-bottom: 12px; line-height: 1.3;">Traces real-time knowledge tracing state probabilities across sub-skills (Algebra, Calculus, Mechanics).</p>
+              
+              <div style="display: flex; gap: 20px; align-items: center; justify-content: center; flex-wrap: wrap;">
+                <!-- SVG Radar Chart Container -->
+                <div style="position: relative; width: 140px; height: 140px;">
+                  <svg id="dkt-radar" width="140" height="140" style="overflow: visible;">
+                    <!-- Grid Polygons -->
+                    <polygon points="70,10 122,100 18,100" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1" />
+                    <polygon points="70,30 104,90 36,90" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1" />
+                    <polygon points="70,50 87,80 53,80" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1" />
+                    <!-- Axis lines -->
+                    <line x1="70" y1="70" x2="70" y2="10" stroke="rgba(0,0,0,0.1)" stroke-width="1" stroke-dasharray="2" />
+                    <line x1="70" y1="70" x2="122" y2="100" stroke="rgba(0,0,0,0.1)" stroke-width="1" stroke-dasharray="2" />
+                    <line x1="70" y1="70" x2="18" y2="100" stroke="rgba(0,0,0,0.1)" stroke-width="1" stroke-dasharray="2" />
+                    <!-- Labels -->
+                    <text x="70" y="5" text-anchor="middle" font-size="9" font-weight="700" fill="var(--text)">Algebra</text>
+                    <text x="126" y="110" text-anchor="start" font-size="9" font-weight="700" fill="var(--text)">Calculus</text>
+                    <text x="14" y="110" text-anchor="end" font-size="9" font-weight="700" fill="var(--text)">Mechanics</text>
+                    <!-- Mastery Polygon (drawn dynamically) -->
+                    <polygon id="dkt-poly" points="70,70 70,70 70,70" fill="rgba(16, 185, 129, 0.25)" stroke="#10b981" stroke-width="2" />
+                  </svg>
+                </div>
+                
+                <div style="flex: 1; min-width: 140px; display: flex; flex-direction: column; gap: 8px;">
+                  <div style="display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 600; color: var(--text);">
+                    <span>Algebra:</span>
+                    <span id="dkt-val-algebra" style="font-family: monospace; color: #10b981;">—</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 600; color: var(--text);">
+                    <span>Calculus:</span>
+                    <span id="dkt-val-calculus" style="font-family: monospace; color: #10b981;">—</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 600; color: var(--text);">
+                    <span>Mechanics:</span>
+                    <span id="dkt-val-mechanics" style="font-family: monospace; color: #10b981;">—</span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Log quiz answers in-place -->
+              <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(0,0,0,0.06); display: flex; flex-direction: column; gap: 8px;">
+                <div style="font-size: 0.75rem; font-weight: 700; color: var(--text);">Record Quiz Response:</div>
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <select id="quiz-skill-select" class="table-input" style="max-width: 100px; padding: 6px; font-size: 0.75rem; border-radius: 6px; border: 1px solid rgba(0,0,0,0.15);">
+                    <option value="Algebra">Algebra</option>
+                    <option value="Calculus">Calculus</option>
+                    <option value="Mechanics">Mechanics</option>
+                  </select>
+                  <select id="quiz-outcome-select" class="table-input" style="max-width: 90px; padding: 6px; font-size: 0.75rem; border-radius: 6px; border: 1px solid rgba(0,0,0,0.15);">
+                    <option value="1">Correct</option>
+                    <option value="0">Incorrect</option>
+                  </select>
+                  <button onclick="submitQuizResponse()" class="btn" style="padding: 6px 12px; font-size: 0.75rem; font-weight: 700; border-radius: 6px; background: #10b981; color: white; border: none; cursor: pointer; width: auto;">Log Quiz</button>
+                </div>
+              </div>
+            </div>
+
             <!-- SHAP Waterfall Plot -->
             <div class="waterfall-section" id="waterfall-section">
               <div class="shap-title">Score Contribution Flow (Waterfall)</div>

@@ -137,6 +137,49 @@ def init_sqlite_db():
             silo_df.to_sql(f"student_data_{school}", conn, if_exists="replace", index=False)
             conn.commit()
             
+    # Initialize student_connections table (GNN Adjacency)
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='student_connections'")
+    if not cursor.fetchone():
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS student_connections (
+                student_id_1 TEXT,
+                student_id_2 TEXT,
+                weight REAL
+            )
+        """)
+        conn.commit()
+        # Populate default cohort study group connections
+        for i in range(18):
+            for j in [i-1, i+1, i-2, i+2]:
+                if 0 <= j < 18 and i != j:
+                    cursor.execute("INSERT INTO student_connections VALUES (?, ?, ?)", (f"student_{i}", f"student_{j}", 0.5))
+        conn.commit()
+        
+    # Initialize student_quiz_logs table (DKT interactions)
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='student_quiz_logs'")
+    if not cursor.fetchone():
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS student_quiz_logs (
+                student_id TEXT,
+                week INTEGER,
+                skill_id TEXT,
+                is_correct INTEGER
+            )
+        """)
+        conn.commit()
+        # Populate with default quiz logs for default cohort
+        import random
+        random.seed(42)
+        skills = ["Algebra", "Calculus", "Mechanics"]
+        for i in range(18):
+            s_id = f"student_{i}"
+            success_prob = 0.5 + 0.02 * i
+            for w in range(1, 5):
+                for skill in skills:
+                    is_correct = 1 if random.random() < success_prob else 0
+                    cursor.execute("INSERT INTO student_quiz_logs VALUES (?, ?, ?, ?)", (s_id, w, skill, is_correct))
+        conn.commit()
+        
     conn.close()
 
 def load_or_create_data():
@@ -275,6 +318,28 @@ def save_student_bias(student_id, bias_value):
         print("Error saving personalization bias:", e)
 
 
+# DKT Global Model Cache
+from models.dkt_model import StudentDKT, train_dkt_model, get_student_mastery
+global_dkt_model = StudentDKT()
+dkt_path = os.path.join(MODELS_DIR, "dkt_model.pth")
+
+def initialize_dkt_agent():
+    global global_dkt_model
+    try:
+        df_all = load_or_create_data()
+        if os.path.exists(dkt_path):
+            global_dkt_model.load_state_dict(torch.load(dkt_path))
+            global_dkt_model.eval()
+            print("[DKT Initialization] Loaded active DKT model checkpoint.")
+        else:
+            train_dkt_model(global_dkt_model, DB_PATH, epochs=30)
+            torch.save(global_dkt_model.state_dict(), dkt_path)
+            global_dkt_model.eval()
+            print("[DKT Initialization] Trained and saved baseline DKT model.")
+    except Exception as e:
+        print(f"[DKT Initialization] Failed to load/train DKT model: {str(e)}")
+
+
 def background_train_task():
     global training_lock
     if not training_lock.acquire(blocking=False):
@@ -284,6 +349,15 @@ def background_train_task():
         print("[MLOps] Background training started...")
         df = load_or_create_data()
         train_model(df)
+        
+        # Retrain DKT
+        try:
+            train_dkt_model(global_dkt_model, DB_PATH, epochs=30)
+            torch.save(global_dkt_model.state_dict(), dkt_path)
+            print("[MLOps] Background DKT model retraining completed.")
+        except Exception as e:
+            print("[MLOps] Failed to retrain DKT in background:", e)
+            
         print("[MLOps] Background training completed successfully.")
     except Exception as e:
         print("[MLOps] Error in background training:", e)
@@ -944,6 +1018,82 @@ def contrastive_train():
         return jsonify({"success": False, "error": str(e)}), 400
 
 
+@app.route('/api/dkt/mastery/<student_id>', methods=['GET'])
+def dkt_mastery(student_id):
+    try:
+        from models.dkt_model import get_student_mastery
+        mastery = get_student_mastery(global_dkt_model, student_id, DB_PATH)
+        return jsonify({
+            "success": True,
+            "student_id": student_id,
+            "mastery": mastery
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route('/api/dkt/log-quiz', methods=['POST'])
+def dkt_log_quiz():
+    try:
+        data = request.get_json() or {}
+        student_id = data.get('student_id', 'default_student').strip() or 'default_student'
+        skill_id = data.get('skill_id', 'Algebra').strip()
+        is_correct = int(data.get('is_correct', 1))
+        week = int(data.get('week', 4))
+        
+        if skill_id not in ["Algebra", "Calculus", "Mechanics"]:
+            return jsonify({"success": False, "error": "Invalid skill ID. Choose Algebra, Calculus, or Mechanics."}), 400
+            
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("INSERT INTO student_quiz_logs VALUES (?, ?, ?, ?)", (student_id, week, skill_id, is_correct))
+        conn.commit()
+        conn.close()
+        
+        # Incremental online fine-tuning step for DKT model
+        from models.dkt_model import load_student_interactions
+        skills_seq, correct_seq = load_student_interactions(student_id, DB_PATH)
+        
+        if len(skills_seq) >= 2:
+            global_dkt_model.train()
+            optimizer = torch.optim.Adam(global_dkt_model.parameters(), lr=0.005)
+            criterion = nn.BCELoss()
+            
+            skill_tensor = torch.tensor([skills_seq[:-1]], dtype=torch.long)
+            correct_tensor = torch.tensor([correct_seq[:-1]], dtype=torch.float32)
+            
+            target_skills = skills_seq[1:]
+            target_correctness = correct_seq[1:]
+            
+            for epoch in range(5):
+                optimizer.zero_grad()
+                probs, _ = global_dkt_model(skill_tensor, correct_tensor)
+                
+                seq_len = len(target_skills)
+                preds = torch.zeros(seq_len)
+                for t in range(seq_len):
+                    preds[t] = probs[0, t, target_skills[t]]
+                    
+                targets = torch.tensor(target_correctness, dtype=torch.float32)
+                loss = criterion(preds, targets)
+                loss.backward()
+                optimizer.step()
+                
+            global_dkt_model.eval()
+            torch.save(global_dkt_model.state_dict(), dkt_path)
+            
+        from models.dkt_model import get_student_mastery
+        mastery = get_student_mastery(global_dkt_model, student_id, DB_PATH)
+        
+        return jsonify({
+            "success": True,
+            "message": f"Quiz interaction recorded for {skill_id}.",
+            "mastery": mastery
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
 # ── MLOps Specific Routes ─────────────────────────────────────────────
 
 @app.route('/api/mlops/history', methods=['GET'])
@@ -1317,6 +1467,7 @@ def log_feedback():
 
 if __name__ == '__main__':
     load_or_create_data()
+    initialize_dkt_agent()
     initialize_rl_agent()
     app.run(debug=False, port=5000)
 

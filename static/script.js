@@ -102,6 +102,9 @@ function showResult(data) {
   const advisorCard = document.getElementById('ai-advisor-card');
   if (advisorCard) advisorCard.classList.remove('hidden');
 
+  const studentId = (document.getElementById('student_id').value || '').trim() || 'default_student';
+  loadDKTMastery(studentId);
+
   const score = data.predicted_score;
 
   // Save prediction details for AI Advisor
@@ -1371,5 +1374,75 @@ async function calculateCounterfactualRecourse() {
     }
   } catch (e) {
     resultsArea.innerHTML = '<div style="font-size: 0.78rem; color: #ef4444;">Failed to calculate counterfactual recourse.</div>';
+  }
+}
+
+async function loadDKTMastery(studentId) {
+  try {
+    const res = await fetch(`/api/dkt/mastery/${encodeURIComponent(studentId)}`);
+    const data = await res.json();
+    if (data.success && data.mastery) {
+      const mastery = data.mastery;
+      
+      const pAlg = mastery.Algebra !== undefined ? mastery.Algebra : 0.6;
+      const pCalc = mastery.Calculus !== undefined ? mastery.Calculus : 0.55;
+      const pMech = mastery.Mechanics !== undefined ? mastery.Mechanics : 0.58;
+      
+      // Update label displays
+      document.getElementById('dkt-val-algebra').textContent = (pAlg * 100).toFixed(1) + '%';
+      document.getElementById('dkt-val-calculus').textContent = (pCalc * 100).toFixed(1) + '%';
+      document.getElementById('dkt-val-mechanics').textContent = (pMech * 100).toFixed(1) + '%';
+      
+      // Calculate radar polygon coordinates
+      const x1 = 70;
+      const y1 = 70 - 60 * pAlg;
+      
+      const x2 = 70 + 51.96 * pCalc;
+      const y2 = 70 + 30.00 * pCalc;
+      
+      const x3 = 70 - 51.96 * pMech;
+      const y3 = 70 + 30.00 * pMech;
+      
+      const poly = document.getElementById('dkt-poly');
+      if (poly) {
+        poly.setAttribute('points', `${x1.toFixed(1)},${y1.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)} ${x3.toFixed(1)},${y3.toFixed(1)}`);
+      }
+    }
+  } catch (e) {
+    console.error("Failed to load DKT mastery data:", e);
+  }
+}
+
+async function submitQuizResponse() {
+  const studentId = (document.getElementById('student_id').value || '').trim() || 'default_student';
+  const skillSelect = document.getElementById('quiz-skill-select');
+  const outcomeSelect = document.getElementById('quiz-outcome-select');
+  if (!skillSelect || !outcomeSelect) return;
+  
+  const skillId = skillSelect.value;
+  const isCorrect = parseInt(outcomeSelect.value);
+  
+  try {
+    const res = await fetch('/api/dkt/log-quiz', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        student_id: studentId,
+        skill_id: skillId,
+        is_correct: isCorrect,
+        week: 4
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`Logged quiz response. Updated DKT mastery!`);
+      if (data.mastery) {
+        loadDKTMastery(studentId);
+      }
+    } else {
+      showToast('Failed to log quiz response: ' + data.error);
+    }
+  } catch (e) {
+    showToast('Could not connect to quiz logger API.');
   }
 }
