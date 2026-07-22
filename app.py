@@ -409,13 +409,55 @@ def predict():
         student_df = pd.DataFrame(student_data_dict)
         student_df = student_df[FEATURE_COLS]
         
-        seq_val, _, _ = get_seq_and_static_data(student_df)
-        N_val, T_val, F_val = seq_val.shape
-        seq_val_flat = seq_val.reshape(-1, F_val)
-        seq_val_scaled = scaler_x.transform(seq_val_flat).reshape(N_val, T_val, F_val)
-        
         student_id = data.get('student_id', 'default_student').strip() or 'default_student'
         notes_text = data.get('notes', '').strip()
+        
+        # 1. Fetch cohort DataFrame
+        df_all = load_or_create_data()
+        if "student_id" not in df_all.columns:
+            df_all["student_id"] = [f"student_{i}" for i in range(len(df_all))]
+            
+        # Append candidate student row
+        cand_row = student_data_dict.copy()
+        cand_row["student_id"] = [student_id]
+        cand_row["notes"] = [notes_text]
+        cand_df = pd.DataFrame(cand_row)
+        
+        df_aug = pd.concat([df_all, cand_df], ignore_index=True)
+        
+        # Build peer connections in SQLite if they don't exist yet for this student
+        try:
+            conn_db = sqlite3.connect(DB_PATH)
+            c_db = conn_db.cursor()
+            c_db.execute("SELECT COUNT(*) FROM student_connections WHERE student_id_1 = ? OR student_id_2 = ?", (student_id, student_id))
+            if c_db.fetchone()[0] == 0:
+                c_db.execute("SELECT rowid, previous_marks FROM student_data")
+                all_rows = c_db.fetchall()
+                all_rows = sorted(all_rows, key=lambda r: abs(r[1] - previous_marks))
+                connections_added = 0
+                for r_idx, r_pm in all_rows:
+                    peer_id = f"student_{r_idx - 1}"
+                    if peer_id != student_id and connections_added < 2:
+                        c_db.execute("INSERT INTO student_connections VALUES (?, ?, ?)", (student_id, peer_id, 0.5))
+                        connections_added += 1
+                conn_db.commit()
+            conn_db.close()
+        except Exception as e:
+            print("[Predict GNN Connection] Failed to update SQLite student connections:", e)
+            
+        # Get sequence data for entire augmented cohort
+        seq_all, _, _ = get_seq_and_static_data(df_aug)
+        N_aug, T_aug, F_aug = seq_all.shape
+        seq_all_flat = seq_all.reshape(-1, F_aug)
+        seq_all_scaled = scaler_x.transform(seq_all_flat).reshape(N_aug, T_aug, F_aug)
+        
+        # Load adjacency matrix for augmented cohort
+        from models.lstm_model import load_adjacency_matrix
+        adj_aug = load_adjacency_matrix(df_aug)
+        
+        # Build text embedding offsets for all nodes
+        notes_all = df_aug["notes"].values
+        idx_all, off_all = prepare_text_tensors(notes_all)
         
         # Qualitative lexicon sentiment analyzer for predictable model shifts
         POSITIVE_KEYWORDS = ["excellent", "outstanding", "brilliant", "progress", "motivated", "active", "consistent", "good", "strong", "great", "stable", "high"]
@@ -435,11 +477,20 @@ def predict():
             
         sentiment_shift = get_lexicon_sentiment(notes_text) * 1.5
         
-        from models.lstm_model import prepare_text_tensors
-        idx_tensor, off_tensor = prepare_text_tensors([notes_text])
-        
         with torch.no_grad():
-            pred_reg, pred_clf, attn_weights = model(torch.tensor(seq_val_scaled, dtype=torch.float32), idx_tensor, off_tensor)
+            pred_reg_all, pred_clf_all, attn_weights_all = model(
+                torch.tensor(seq_all_scaled, dtype=torch.float32), 
+                idx_all, 
+                off_all, 
+                adj_aug
+            )
+            
+            # Slice output for candidate student (last row in batch)
+            cand_idx = N_aug - 1
+            pred_reg = pred_reg_all[cand_idx].unsqueeze(0)
+            pred_clf = pred_clf_all[cand_idx].unsqueeze(0)
+            attn_weights = attn_weights_all[cand_idx].unsqueeze(0)
+            
             reg_unscaled = scaler_y.inverse_transform(pred_reg.numpy())
             global_predicted_score = round(float(reg_unscaled[0][0]) + sentiment_shift, 2)
             global_predicted_score = max(0.0, min(100.0, global_predicted_score))
@@ -456,7 +507,14 @@ def predict():
             # Apply meta-learning student-specific neural layer personalization
             has_personalization = apply_personalization(model, student_id)
             if has_personalization:
-                pred_reg_pers, _, _ = model(torch.tensor(seq_val_scaled, dtype=torch.float32), idx_tensor, off_tensor)
+                # Predict with personalized head (message-passed through neighbor graph)
+                pred_reg_pers_all, _, _ = model(
+                    torch.tensor(seq_all_scaled, dtype=torch.float32), 
+                    idx_all, 
+                    off_all, 
+                    adj_aug
+                )
+                pred_reg_pers = pred_reg_pers_all[cand_idx].unsqueeze(0)
                 reg_pers_unscaled = scaler_y.inverse_transform(pred_reg_pers.numpy())
                 predicted_score = round(float(reg_pers_unscaled[0][0]) + sentiment_shift, 2)
                 predicted_score = max(0.0, min(100.0, predicted_score))
@@ -465,8 +523,9 @@ def predict():
                 
             bias = round(predicted_score - global_predicted_score, 2)
             
-        # Compute Monte Carlo Dropout prediction uncertainty
-        _, uncertainty, variance = predict_with_uncertainty(model, seq_val_scaled, idx_tensor, off_tensor, scaler_y, sentiment_shift, num_samples=50)
+        # Compute Monte Carlo Dropout prediction uncertainty (50 passes)
+        idx_cand, off_cand = prepare_text_tensors([notes_text])
+        _, uncertainty, variance = predict_with_uncertainty(model, seq_all_scaled[[cand_idx]], idx_cand, off_cand, scaler_y, sentiment_shift, num_samples=50)
             
         # Calculate SHAP explanations
         import shap
