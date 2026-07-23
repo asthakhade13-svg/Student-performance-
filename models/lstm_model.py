@@ -67,6 +67,71 @@ class GraphAttentionLayer(nn.Module):
         return h_prime
 
 
+class TransformerXLLayer(nn.Module):
+    """
+    Transformer-XL Layer with Segment Recurrence and Relative Positional Bias.
+    """
+    def __init__(self, d_model=32, nhead=2, dim_feedforward=32, dropout=0.1):
+        super(TransformerXLLayer, self).__init__()
+        self.d_model = d_model
+        self.nhead = nhead
+        
+        self.q_proj = nn.Linear(d_model, d_model)
+        self.k_proj = nn.Linear(d_model, d_model)
+        self.v_proj = nn.Linear(d_model, d_model)
+        
+        self.out_proj = nn.Linear(d_model, d_model)
+        self.dropout = nn.Dropout(dropout)
+        
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        
+        self.ff = nn.Sequential(
+            nn.Linear(d_model, dim_feedforward),
+            nn.ReLU(),
+            nn.Linear(dim_feedforward, d_model),
+            nn.Dropout(dropout)
+        )
+        
+        # Learnable relative positional bias parameter
+        self.rel_pos_bias = nn.Parameter(torch.zeros(nhead, 2, 4)) # [nhead, seq_len, total_len]
+        
+    def forward(self, x, memory=None):
+        batch, seq_len, d_model = x.size()
+        
+        if memory is None:
+            memory = torch.zeros(batch, 0, d_model, device=x.device)
+            
+        memory = memory.detach()
+        h_tilde = torch.cat([memory, x], dim=1)
+        
+        q = self.q_proj(x) 
+        k = self.k_proj(h_tilde) 
+        v = self.v_proj(h_tilde) 
+        
+        head_dim = d_model // self.nhead
+        q_heads = q.view(batch, seq_len, self.nhead, head_dim).transpose(1, 2) 
+        k_heads = k.view(batch, -1, self.nhead, head_dim).transpose(1, 2) 
+        v_heads = v.view(batch, -1, self.nhead, head_dim).transpose(1, 2) 
+        
+        scores = torch.matmul(q_heads, k_heads.transpose(-2, -1)) / np.sqrt(head_dim) 
+        
+        total_len = h_tilde.size(1)
+        bias = self.rel_pos_bias[:, :seq_len, :total_len]
+        scores = scores + bias.unsqueeze(0)
+        
+        attn_weights = torch.softmax(scores, dim=-1)
+        attn_weights = self.dropout(attn_weights)
+        
+        context = torch.matmul(attn_weights, v_heads) 
+        context = context.transpose(1, 2).contiguous().view(batch, seq_len, d_model)
+        
+        x = self.norm1(x + self.dropout(self.out_proj(context)))
+        x = self.norm2(x + self.ff(x))
+        
+        return x, x
+
+
 class GradientReversal(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, alpha):
@@ -87,13 +152,12 @@ class StudentTransformerLSTM(nn.Module):
         # Bidirectional LSTM to capture future and past context
         self.lstm = nn.LSTM(input_size=seq_features, hidden_size=hidden_dim, num_layers=num_layers, batch_first=True, bidirectional=True)
         
-        # Transformer Multi-Head Self-Attention block
-        self.transformer_layer = nn.TransformerEncoderLayer(
+        # Transformer-XL Attention block with segment recurrence
+        self.transformer_xl_layer = TransformerXLLayer(
             d_model=hidden_dim * 2,  # 32
             nhead=nhead,
             dim_feedforward=32,
-            dropout=0.1,
-            batch_first=True
+            dropout=0.1
         )
         
         # Self-Attention scoring layer for temporal pooling
@@ -134,8 +198,12 @@ class StudentTransformerLSTM(nn.Module):
         # x shape: [batch, 4, 7]
         lstm_out, _ = self.lstm(x)  # shape: [batch, 4, hidden_dim * 2] (32)
         
-        # Transformer Multi-Head Self-Attention
-        trans_out = self.transformer_layer(lstm_out)  # shape: [batch, 4, 32]
+        # Transformer-XL Segment Recurrence (Chunk sequence into 2 segments of length 2)
+        seg1 = lstm_out[:, :2, :]
+        seg2 = lstm_out[:, 2:, :]
+        out1, mem1 = self.transformer_xl_layer(seg1, memory=None)
+        out2, mem2 = self.transformer_xl_layer(seg2, memory=mem1)
+        trans_out = torch.cat([out1, out2], dim=1)  # shape: [batch, 4, 32]
         
         # Temporal attention pooling
         attn_scores = self.attn_linear(trans_out)  # shape: [batch, 4, 1]
