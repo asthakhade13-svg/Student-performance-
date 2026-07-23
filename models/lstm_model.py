@@ -67,6 +67,20 @@ class GraphAttentionLayer(nn.Module):
         return h_prime
 
 
+class GradientReversal(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, alpha):
+        ctx.alpha = alpha
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return grad_output * -ctx.alpha, None
+
+def grad_reverse(x, alpha=1.0):
+    return GradientReversal.apply(x, alpha)
+
+
 class StudentTransformerLSTM(nn.Module):
     def __init__(self, seq_features=7, hidden_dim=16, num_layers=1, nhead=2, vocab_size=1000, text_dim=64):
         super(StudentTransformerLSTM, self).__init__()
@@ -108,11 +122,15 @@ class StudentTransformerLSTM(nn.Module):
             nn.Dropout(p=0.1)
         )
         
-        # Heads
+        # Predictor Heads
         self.reg_head = nn.Linear(16, 1)
         self.clf_head = nn.Linear(16, 3)
         
-    def forward(self, x, text_indices=None, text_offsets=None, adj=None):
+        # Demographic Adversary Heads
+        self.adv_district_head = nn.Linear(16, 2)
+        self.adv_gender_head = nn.Linear(16, 2)
+        
+    def forward(self, x, text_indices=None, text_offsets=None, adj=None, return_adv=False, alpha=1.0):
         # x shape: [batch, 4, 7]
         lstm_out, _ = self.lstm(x)  # shape: [batch, 4, hidden_dim * 2] (32)
         
@@ -159,6 +177,13 @@ class StudentTransformerLSTM(nn.Module):
         reg_out = self.reg_head(shared_out)
         clf_out = self.clf_head(shared_out)
         
+        if return_adv:
+            # Reverse gradients flowing to representation encoder
+            reversed_shared = grad_reverse(shared_out, alpha)
+            district_logits = self.adv_district_head(reversed_shared)
+            gender_logits = self.adv_gender_head(reversed_shared)
+            return reg_out, clf_out, attn_weights, district_logits, gender_logits
+            
         return reg_out, clf_out, attn_weights
 
 def calculate_burnout_label(row):
@@ -253,6 +278,48 @@ def load_adjacency_matrix(df, db_path=None):
     return torch.tensor(adj, dtype=torch.float32)
 
 
+def compute_fairness_audit(df, predictions, sensitive_col="district", target_threshold=75.0):
+    actuals = df["final_score"].values
+    sensitive = df[sensitive_col].values
+    
+    pred_pos = (predictions >= target_threshold).astype(int)
+    act_pos = (actuals >= target_threshold).astype(int)
+    
+    groups = np.unique(sensitive)
+    if len(groups) < 2:
+        return {"demographic_parity_diff": 0.0, "equalized_odds_diff": 0.0}
+        
+    rates = {}
+    for g in groups:
+        mask = (sensitive == g)
+        if not np.any(mask):
+            continue
+            
+        g_pred = pred_pos[mask]
+        g_act = act_pos[mask]
+        
+        selection_rate = np.mean(g_pred)
+        
+        p_mask = (g_act == 1)
+        tpr = np.mean(g_pred[p_mask]) if np.sum(p_mask) > 0 else 0.0
+        
+        n_mask = (g_act == 0)
+        fpr = np.mean(g_pred[n_mask]) if np.sum(n_mask) > 0 else 0.0
+        
+        rates[g] = {"selection": selection_rate, "tpr": tpr, "fpr": fpr}
+        
+    g0, g1 = groups[0], groups[1]
+    dp_diff = abs(rates[g0]["selection"] - rates[g1]["selection"])
+    tpr_diff = abs(rates[g0]["tpr"] - rates[g1]["tpr"])
+    fpr_diff = abs(rates[g0]["fpr"] - rates[g1]["fpr"])
+    eo_diff = max(tpr_diff, fpr_diff)
+    
+    return {
+        "demographic_parity_diff": round(float(dp_diff), 4),
+        "equalized_odds_diff": round(float(eo_diff), 4)
+    }
+
+
 def train_pytorch_model(df, model_path):
     seq_data, y_reg, y_clf = get_seq_and_static_data(df)
     
@@ -265,6 +332,10 @@ def train_pytorch_model(df, model_path):
     scaler_y = StandardScaler()
     y_reg_scaled = scaler_y.fit_transform(y_reg)
     
+    # Load sensitive demographics
+    districts = df["district"].values if "district" in df.columns else np.zeros(len(df))
+    genders = df["gender"].values if "gender" in df.columns else np.zeros(len(df))
+    
     # Extract student counselor text notes
     notes = df["notes"].values if "notes" in df.columns else [""] * len(df)
     
@@ -275,12 +346,17 @@ def train_pytorch_model(df, model_path):
     mae_list = []
     r2_list = []
     
+    adv_criterion = nn.CrossEntropyLoss()
+    
     if cv >= 2:
         kf = KFold(n_splits=cv, shuffle=True, random_state=42)
         for train_idx, val_idx in kf.split(seq_data):
             s_tr, s_val = seq_data_scaled[train_idx], seq_data_scaled[val_idx]
             yr_tr, yr_val = y_reg_scaled[train_idx], y_reg_scaled[val_idx]
             yc_tr, yc_val = y_clf[train_idx], y_clf[val_idx]
+            
+            d_tr = districts[train_idx]
+            g_tr = genders[train_idx]
             
             # Slice adjacency matrix for folds
             adj_tr = adj_all[train_idx][:, train_idx]
@@ -299,10 +375,24 @@ def train_pytorch_model(df, model_path):
             model.train()
             for epoch in range(250):
                 optimizer.zero_grad()
-                pred_reg, pred_clf, _ = model(torch.tensor(s_tr, dtype=torch.float32), idx_tr, off_tr, adj_tr)
+                alpha = min(1.0, float(epoch) / 100.0)
+                pred_reg, pred_clf, _, dist_logits, gend_logits = model(
+                    torch.tensor(s_tr, dtype=torch.float32), 
+                    idx_tr, 
+                    off_tr, 
+                    adj_tr, 
+                    return_adv=True, 
+                    alpha=alpha
+                )
+                
                 loss_reg = reg_criterion(pred_reg, torch.tensor(yr_tr, dtype=torch.float32))
                 loss_clf = clf_criterion(pred_clf, torch.tensor(yc_tr, dtype=torch.long))
-                loss = loss_reg + 1.0 * loss_clf
+                
+                loss_dist = adv_criterion(dist_logits, torch.tensor(d_tr, dtype=torch.long))
+                loss_gend = adv_criterion(gend_logits, torch.tensor(g_tr, dtype=torch.long))
+                
+                # Combine losses: GRL forces encoder features to be district- and gender-invariant
+                loss = loss_reg + 1.0 * loss_clf + 0.5 * loss_dist + 0.5 * loss_gend
                 loss.backward()
                 optimizer.step()
                 
@@ -334,18 +424,43 @@ def train_pytorch_model(df, model_path):
     final_model.train()
     for epoch in range(250):
         optimizer.zero_grad()
-        pred_reg, pred_clf, _ = final_model(torch.tensor(seq_data_scaled, dtype=torch.float32), idx_all, off_all, adj_all)
+        alpha = min(1.0, float(epoch) / 100.0)
+        pred_reg, pred_clf, _, dist_logits, gend_logits = final_model(
+            torch.tensor(seq_data_scaled, dtype=torch.float32), 
+            idx_all, 
+            off_all, 
+            adj_all, 
+            return_adv=True, 
+            alpha=alpha
+        )
         loss_reg = reg_criterion(pred_reg, torch.tensor(y_reg_scaled, dtype=torch.float32))
         loss_clf = clf_criterion(pred_clf, torch.tensor(y_clf, dtype=torch.long))
-        loss = loss_reg + 1.0 * loss_clf
+        
+        loss_dist = adv_criterion(dist_logits, torch.tensor(districts, dtype=torch.long))
+        loss_gend = adv_criterion(gend_logits, torch.tensor(genders, dtype=torch.long))
+        
+        loss = loss_reg + 1.0 * loss_clf + 0.5 * loss_dist + 0.5 * loss_gend
         loss.backward()
         optimizer.step()
+        
+    # Run Fairness Audit
+    final_model.eval()
+    with torch.no_grad():
+        preds_all, _, _ = final_model(torch.tensor(seq_data_scaled, dtype=torch.float32), idx_all, off_all, adj_all)
+        preds_unscaled = scaler_y.inverse_transform(preds_all.numpy()).flatten()
+        
+    fairness_district = compute_fairness_audit(df, preds_unscaled, sensitive_col="district")
+    fairness_gender = compute_fairness_audit(df, preds_unscaled, sensitive_col="gender")
+    print(f"[Fairness Audit] District Parity Diff: {fairness_district['demographic_parity_diff']}, Equalized Odds: {fairness_district['equalized_odds_diff']}")
+    print(f"[Fairness Audit] Gender Parity Diff: {fairness_gender['demographic_parity_diff']}, Equalized Odds: {fairness_gender['equalized_odds_diff']}")
         
     payload = {
         "model_state": final_model.state_dict(),
         "scaler_x": scaler_x,
-        "scaler_y": scaler_y
+        "scaler_y": scaler_y,
+        "fairness_district": fairness_district,
+        "fairness_gender": fairness_gender
     }
     joblib.dump(payload, model_path)
     
-    return mae_mean, mae_std, r2_mean
+    return mae_mean, mae_std, r2_mean, fairness_district, fairness_gender

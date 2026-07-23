@@ -819,7 +819,7 @@ function renderMLOpsDashboard(data) {
   
   const tbody = document.getElementById('mlops-history-body');
   if (!history.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="loading-row">No runs registered yet. Retrain the model to create one.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="loading-row">No runs registered yet. Retrain the model to create one.</td></tr>';
     return;
   }
   
@@ -833,12 +833,30 @@ function renderMLOpsDashboard(data) {
       ? '<button class="rollback-btn disabled" disabled>Active</button>' 
       : `<button class="rollback-btn" onclick="rollbackToVersion('${run.version}')">Activate</button>`;
       
+    const fd = run.fairness_district || {};
+    const fg = run.fairness_gender || {};
+    
+    const fdText = fd.demographic_parity_diff !== undefined 
+      ? `${(fd.demographic_parity_diff * 100).toFixed(1)}% / ${(fd.equalized_odds_diff * 100).toFixed(1)}%` 
+      : '0.0% / 0.0%';
+    const fgText = fg.demographic_parity_diff !== undefined 
+      ? `${(fg.demographic_parity_diff * 100).toFixed(1)}% / ${(fg.equalized_odds_diff * 100).toFixed(1)}%` 
+      : '0.0% / 0.0%';
+      
+    const fdVal = fd.demographic_parity_diff || 0.0;
+    const fgVal = fg.demographic_parity_diff || 0.0;
+    
+    const fdColor = fdVal < 0.12 ? '#10b981' : '#f59e0b';
+    const fgColor = fgVal < 0.12 ? '#10b981' : '#f59e0b';
+      
     return `
       <tr class="${isActive ? 'row-active' : ''}">
         <td class="ver-cell font-bold">${run.version}</td>
         <td>${run.created_at}</td>
         <td>${run.data_size} students</td>
         <td>${run.mae}</td>
+        <td><span style="color: ${fdColor}; font-weight: 700; font-family: monospace;">⚖️ ${fdText}</span></td>
+        <td><span style="color: ${fgColor}; font-weight: 700; font-family: monospace;">⚖️ ${fgText}</span></td>
         <td>${statusBadge}</td>
         <td>${actionBtn}</td>
       </tr>

@@ -59,6 +59,11 @@ def generate_default_sequence_data():
     previous_marks = [50.0, 65.0, 78.0, 88.0, 40.0, 70.0, 92.0, 55.0, 95.0, 60.0, 70.0, 70.0, 72.0, 85.0, 60.0, 80.0, 65.0, 50.0]
     final_score = [55.0, 68.0, 80.0, 92.0, 45.0, 75.0, 96.0, 60.0, 99.0, 65.0, 75.0, 75.0, 62.0, 88.0, 73.0, 69.0, 76.0, 64.0]
     
+    # District demographic indicator (0 = urban/district A, 1 = rural/district B)
+    district = [0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0]
+    # Gender demographic indicator (0 = Male/Non-binary, 1 = Female)
+    gender = [1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1]
+    
     study_base = [2.0, 4.0, 6.0, 8.0, 1.0, 5.0, 7.0, 3.0, 9.0, 4.0, 5.0, 5.0, 5.0, 6.0, 3.0, 7.0, 4.0, 2.0]
     sleep_base = [7.0, 6.5, 8.0, 7.5, 5.5, 8.0, 7.0, 7.5, 8.5, 6.0, 7.5, 7.5, 4.0, 8.5, 7.5, 5.0, 8.0, 7.5]
     lms_base = [15, 25, 40, 45, 10, 30, 50, 20, 55, 28, 30, 30, 12, 45, 80, 15, 35, 50]
@@ -67,7 +72,9 @@ def generate_default_sequence_data():
     
     data = {
         "attendance": attendance,
-        "previous_marks": previous_marks
+        "previous_marks": previous_marks,
+        "district": district,
+        "gender": gender
     }
     
     for w in range(1, 5):
@@ -112,7 +119,7 @@ def init_sqlite_db():
     if table_exists:
         cursor.execute("PRAGMA table_info(student_data)")
         cols = [col[1] for col in cursor.fetchall()]
-        if "notes" not in cols:
+        if "notes" not in cols or "district" not in cols or "gender" not in cols:
             upgrade_needed = True
             
     if not table_exists or upgrade_needed:
@@ -266,7 +273,7 @@ def train_model(df):
     model_filename = f"model_{version}.pth"
     model_filepath = os.path.join(MODELS_DIR, model_filename)
     
-    mae_mean, mae_std, r2_mean = train_pytorch_model(df, model_filepath)
+    mae_mean, mae_std, r2_mean, fairness_dist, fairness_gend = train_pytorch_model(df, model_filepath)
     
     entry = {
         "version": version,
@@ -275,6 +282,8 @@ def train_model(df):
         "mae": round(float(mae_mean), 2),
         "mae_std": round(float(mae_std), 2),
         "data_size": len(df),
+        "fairness_district": fairness_dist,
+        "fairness_gender": fairness_gend,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     registry["history"].append(entry)
@@ -495,6 +504,8 @@ def predict():
         cand_row = student_data_dict.copy()
         cand_row["student_id"] = [student_id]
         cand_row["notes"] = [notes_text]
+        cand_row["district"] = [int(data.get("district", 0))]
+        cand_row["gender"] = [int(data.get("gender", 0))]
         cand_df = pd.DataFrame(cand_row)
         
         df_aug = pd.concat([df_all, cand_df], ignore_index=True)
@@ -1446,6 +1457,8 @@ def log_feedback():
         for col in FEATURE_COLS:
             new_row[col] = float(features.get(col, 0.0))
         new_row['final_score'] = actual_score
+        new_row['district'] = int(data.get('district', features.get('district', 0)))
+        new_row['gender'] = int(data.get('gender', features.get('gender', 0)))
         
         conn = sqlite3.connect(DB_PATH)
         new_df = pd.DataFrame([new_row])

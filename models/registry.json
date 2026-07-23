@@ -1,5 +1,5 @@
 {
-  "active_version": "v27",
+  "active_version": "v28",
   "history": [
     {
       "version": "v1",
@@ -236,6 +236,23 @@
       "mae_std": 2.41,
       "data_size": 19,
       "created_at": "2026-07-17 20:04:55"
+    },
+    {
+      "version": "v28",
+      "path": "C:\\Users\\Astha\\OneDrive\\Desktop\\Desktop\\student\\models\\model_v28.pth",
+      "r2": -1.0,
+      "mae": 35.39,
+      "mae_std": 39.84,
+      "data_size": 18,
+      "fairness_district": {
+        "demographic_parity_diff": 0.425,
+        "equalized_odds_diff": 0.75
+      },
+      "fairness_gender": {
+        "demographic_parity_diff": 0.25,
+        "equalized_odds_diff": 0.3
+      },
+      "created_at": "2026-07-23 19:56:42"
     }
   ]
 }
