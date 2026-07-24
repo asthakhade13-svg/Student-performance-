@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 import sqlite3
 import threading
-from models.lstm_model import train_pytorch_model, StudentTransformerLSTM, get_seq_and_static_data
+from models.lstm_model import train_pytorch_model, StudentTransformerLSTM, get_seq_and_static_data, prepare_text_tensors
 from models.personalization_manager import apply_personalization, train_personalized_head
 from models.rag_vector_store import LocalVectorStore
 
@@ -618,19 +618,38 @@ def predict():
         X_all = df[FEATURE_COLS]
         
         def shap_predict_fn(X_np):
-            df_temp = pd.DataFrame(X_np, columns=FEATURE_COLS)
-            seq, _, _ = get_seq_and_static_data(df_temp)
-            N_t, T_t, F_t = seq.shape
-            seq_flat_t = seq.reshape(-1, F_t)
-            seq_scaled = scaler_x.transform(seq_flat_t).reshape(N_t, T_t, F_t)
+            N_t = X_np.shape[0]
+            batch_size = 100
+            all_preds = []
             
-            notes_list = [notes_text] * N_t
-            idx_temp, off_temp = prepare_text_tensors(notes_list)
-            
-            with torch.no_grad():
-                preds_tensor, _, _ = model(torch.tensor(seq_scaled, dtype=torch.float32), idx_temp, off_temp)
-                preds_unscaled = scaler_y.inverse_transform(preds_tensor.numpy())
-            return (preds_unscaled.flatten() + sentiment_shift)
+            for idx_b in range(0, N_t, batch_size):
+                X_batch = X_np[idx_b : idx_b + batch_size]
+                N_batch = X_batch.shape[0]
+                
+                df_temp = pd.concat([student_df] * N_batch, ignore_index=True)
+                df_temp["attendance"] = X_batch[:, 0]
+                df_temp["previous_marks"] = X_batch[:, 1]
+                
+                seq, _, _ = get_seq_and_static_data(df_temp)
+                N_b, T_b, F_b = seq.shape
+                seq_flat_b = seq.reshape(-1, F_b)
+                seq_scaled = scaler_x.transform(seq_flat_b).reshape(N_b, T_b, F_b)
+                
+                notes_list = [notes_text] * N_b
+                idx_temp, off_temp = prepare_text_tensors(notes_list)
+                
+                with torch.no_grad():
+                    adj_batch = torch.eye(N_b, device=seq_scaled.device if hasattr(seq_scaled, 'device') else None)
+                    preds_tensor, _, _ = model(
+                        torch.tensor(seq_scaled, dtype=torch.float32), 
+                        idx_temp, 
+                        off_temp, 
+                        adj_batch
+                    )
+                    preds_unscaled = scaler_y.inverse_transform(preds_tensor.numpy())
+                all_preds.append(preds_unscaled.flatten() + sentiment_shift)
+                
+            return np.concatenate(all_preds)
             
         background = X_all
         explainer = shap.KernelExplainer(shap_predict_fn, background)
