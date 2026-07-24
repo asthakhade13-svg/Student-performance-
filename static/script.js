@@ -1207,6 +1207,11 @@ function toggleAdminMode() {
     const rlContainer = document.getElementById('rl-advisor-toggle-container');
     if (rlContainer) rlContainer.style.display = "flex";
     
+    const dktCard = document.getElementById('dkt-card');
+    if (dktCard) dktCard.style.display = "block";
+    const counterfactualContainer = document.getElementById('counterfactual-container');
+    if (counterfactualContainer) counterfactualContainer.style.display = "block";
+    
     const boundsEl = document.getElementById('score-bounds');
     if (boundsEl && lastPredictionResult && lastPredictionResult.uncertainty !== undefined) {
       boundsEl.textContent = `/ 100 (± ${lastPredictionResult.uncertainty.toFixed(2)})`;
@@ -1248,6 +1253,11 @@ function toggleAdminMode() {
     if (zsContainer) zsContainer.style.display = "none";
     const rlContainer = document.getElementById('rl-advisor-toggle-container');
     if (rlContainer) rlContainer.style.display = "none";
+    
+    const dktCard = document.getElementById('dkt-card');
+    if (dktCard) dktCard.style.display = "none";
+    const counterfactualContainer = document.getElementById('counterfactual-container');
+    if (counterfactualContainer) counterfactualContainer.style.display = "none";
     
     const boundsEl = document.getElementById('score-bounds');
     if (boundsEl) {
