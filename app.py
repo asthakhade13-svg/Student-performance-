@@ -1179,12 +1179,12 @@ def generate_advice():
         burnout_risk = data.get('burnout_risk', 'Low')
         explanations = data.get('explanations', [])
         
-        # Calculate RL Sequential Recommendations
+        # Calculate Cooperative MARL Sequential Recommendations
         rl_markdown = ""
         enable_rl = data.get('enable_rl', True)
         try:
             if enable_rl and global_rl_agent is not None:
-                from models.rl_advisor import ACTIONS, transition_state
+                from models.rl_advisor import ACTIONS, STUDENT_BEHAVIORS, transition_marl_state
                 curr_state = np.array([
                     attendance, previous_marks, study_hours, sleep_hours, lms_logins, assignments_completed, mock_exams
                 ])
@@ -1204,15 +1204,22 @@ def generate_advice():
                 score_t = local_predict(curr_state)
                 rl_timeline = []
                 for week in range(1, 5):
-                    action_idx = global_rl_agent.select_action(curr_state, epsilon=0.0)
-                    act = ACTIONS[action_idx]
-                    next_state = transition_state(curr_state, action_idx)
+                    # Advisor suggests action
+                    a_adv = global_rl_agent.select_advisor_action(curr_state, epsilon=0.0)
+                    act_adv = ACTIONS[a_adv]
+                    
+                    # Student decides action based on recommendation
+                    a_stud = global_rl_agent.select_student_action(curr_state, a_adv, epsilon=0.0)
+                    act_stud = STUDENT_BEHAVIORS[a_stud]
+                    
+                    next_state = transition_marl_state(curr_state, a_adv, a_stud)
                     score_next = local_predict(next_state)
                     reward = score_next - score_t
                     
                     rl_timeline.append({
                         "week": week,
-                        "action_name": act["name"],
+                        "adv_action_name": act_adv["name"],
+                        "stud_action_name": act_stud["name"],
                         "details": f"Study: {next_state[2]:.1f}h/day, Sleep: {next_state[3]:.1f}h/day, LMS Logins: {int(next_state[4])}/wk",
                         "predicted_score": round(score_next, 2),
                         "improvement": round(reward, 2)
@@ -1222,15 +1229,16 @@ def generate_advice():
                 
                 if rl_timeline:
                     rl_markdown = (
-                        "### 🎯 Sequential RL Study Habit Policy Recommendations\n"
-                        "The AI advisor operates as a Sequential Reinforcement Learning agent (Deep Q-Network). "
-                        "Below is the 4-week optimized habit intervention path calculated to maximize cumulative academic gains:\n\n"
+                        "### 🎯 Multi-Agent RL Cooperative Intervention & Habit Projections\n"
+                        "The counseling advice is modeled as a cooperative game between two RL agents: the **Advisor Agent** (recommending study interventions) and the **Student Agent** (modeling habit compliance behavior):\n\n"
                     )
                     for step in rl_timeline:
                         sign = "+" if step["improvement"] >= 0 else ""
                         rl_markdown += (
-                            f"*   **Week {step['week']} Intervention**: **{step['action_name']}**\n"
-                            f"    *   *Adjusted Habits*: {step['details']}\n"
+                            f"*   **Week {step['week']} Simulation**:\n"
+                            f"    *   *Advisor Recommendation*: **{step['adv_action_name']}**\n"
+                            f"    *   *Student Compliance Focus*: **{step['stud_action_name']}**\n"
+                            f"    *   *Cooperative State*: {step['details']}\n"
                             f"    *   *Projected Grade*: **{step['predicted_score']} / 100** ({sign}{step['improvement']:.2f} marks change)\n"
                         )
                     rl_markdown += "\n"
