@@ -92,9 +92,13 @@ def run_react_agent(student_profile, api_key=None):
         # Build report
         final_report = (
             f"### 📖 Personalized AI Academic Advisory Report (Agentic RAG & Self-Corrected)\n\n"
-            f"**Autonomous Agent Auditing Dashboard**:\n"
-            f"*   **Wellness Benchmark Audit**: {obs2}\n"
-            f"*   **Baseline Cohort Mock Average**: {obs3.strip()} / 100\n\n"
+            f"<details style='margin-bottom: 15px; padding: 10px; background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.15); border-radius: 8px;'>\n"
+            f"  <summary style='cursor: pointer; font-weight: 700; color: #007cff;'>⚙️ View Autonomous Agent Auditing Diagnostics</summary>\n"
+            f"  <div style='margin-top: 10px; font-size: 0.72rem; line-height: 1.4; color: var(--text);'>\n"
+            f"    <strong>Wellness Benchmark Audit</strong>: {obs2}<br/>\n"
+            f"    <strong>Baseline Cohort Mock Average</strong>: {obs3.strip()} / 100\n"
+            f"  </div>\n"
+            f"</details>\n\n"
             f"#### 1. Strength & Risk Factor Analysis\n"
             f"*   **Burnout Risk Alert ({student_profile['burnout_risk']})**: Based on cooperative reinforcement learning evaluations, your average sleep of {student_profile['sleep_hours']} hours is low. "
             f"The cohort benchmark audit confirms you are sleep-deprived compared to peers. Sleep is critical for memory consolidation; prioritize rest before exam day.\n"

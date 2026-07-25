@@ -947,7 +947,9 @@ async function generateAISuggestions() {
       // Render Agent ReAct Console Logs
       const consoleWrapper = document.getElementById('agent-console-wrapper');
       const consoleLogs = document.getElementById('agent-console-logs');
-      if (consoleWrapper && consoleLogs && data.agent_logs) {
+      const isAdmin = document.getElementById('admin-mode-toggle').checked;
+      
+      if (consoleWrapper && consoleLogs && data.agent_logs && isAdmin) {
         consoleWrapper.classList.remove('hidden');
         consoleLogs.innerHTML = '';
         data.agent_logs.forEach((log) => {
