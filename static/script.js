@@ -943,6 +943,31 @@ async function generateAISuggestions() {
     const data = await res.json();
     if (data.success) {
       responseText.innerHTML = parseMarkdown(data.advice);
+      
+      // Render Agent ReAct Console Logs
+      const consoleWrapper = document.getElementById('agent-console-wrapper');
+      const consoleLogs = document.getElementById('agent-console-logs');
+      if (consoleWrapper && consoleLogs && data.agent_logs) {
+        consoleWrapper.classList.remove('hidden');
+        consoleLogs.innerHTML = '';
+        data.agent_logs.forEach((log) => {
+          let color = '#f8fafc';
+          if (log.startsWith('Thought:')) color = '#38bdf8';
+          else if (log.startsWith('Action:')) color = '#a78bfa';
+          else if (log.startsWith('Observation:')) color = '#34d399';
+          
+          const logLine = document.createElement('div');
+          logLine.style.color = color;
+          logLine.style.marginBottom = '6px';
+          logLine.style.borderLeft = `3px solid ${color}`;
+          logLine.style.paddingLeft = '8px';
+          logLine.textContent = log;
+          consoleLogs.appendChild(logLine);
+        });
+      } else if (consoleWrapper) {
+        consoleWrapper.classList.add('hidden');
+      }
+
       if (data.is_mock) {
         showToast('Displaying simulated coaching suggestions.');
       } else {

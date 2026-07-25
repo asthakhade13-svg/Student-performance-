@@ -1319,97 +1319,30 @@ def generate_advice():
 
         rag_context = "\n\n".join(retrieved_docs)
 
-        # Check if API Key is configured
-        if not GEMINI_API_KEY:
-            # Format RAG recommendations callout in mock report
-            rag_callout = ""
-            if retrieved_docs:
-                rag_callout = "#### 📖 Recommended Reading & Study Resources (RAG matched):\n"
-                for doc in retrieved_docs:
-                    rag_callout += f"> * {doc.replace('# ', '').strip().replace(chr(10), ' ')}\n"
-                rag_callout += "\n"
-
-            burnout_alert = (
-                "CRITICAL WARNING: High risk of student burnout! You must prioritize rest, increase sleep hours, and take frequent study breaks." if burnout_risk == "High"
-                else "Caution: Moderate risk of burnout detected. Balance study hours with relaxation and ensure regular sleep." if burnout_risk == "Medium"
-                else "Excellent! You are maintaining a healthy study-life balance."
-            )
-            mock_plan = (
-                "### Personalized AI Academic Advisory Report\n\n"
-                "> *Notice: Gemini API Key is not set in environment variables. Displaying simulated RAG-augmented study plan.*\n\n"
-                "#### 1. Strength & Risk Factor Analysis\n"
-                f"{rag_callout}"
-                f"*   **Burnout Risk Alert ({burnout_risk})**: {burnout_alert}\n"
-                f"*   **Attendance ({attendance}%)**: " + 
-                ("Excellent! You are attending class regularly, which builds a strong foundation." if attendance >= 85 
-                 else "Moderate. Increasing attendance to 85%+ will help capture key topics.") + "\n"
-                f"*   **Study Time ({study_hours} hrs/day)**: " + 
-                ("Outstanding dedication! You are studying consistently." if study_hours >= 7 
-                 else "Room for improvement. Adding 1-2 study hours daily could yield significant score increases.") + "\n"
-                f"*   **Assignments ({assignments_completed}/10)**: " + 
-                ("High completion! You are practicing and staying on track." if assignments_completed >= 8 
-                 else "Critical risk. Completing assignments builds practical skills. Aim for 9/10.") + "\n"
-                f"*   **Sleep & Wellness ({sleep_hours} hrs/day)**: " +
-                ("Adequate rest. Getting 7-8 hours of sleep protects memory retention." if sleep_hours >= 7
-                 else "Sleep deprivation risk. Sleep hours are low; prioritize wellness and sleep for learning retention.") + "\n"
-                f"*   **LMS Engagement ({lms_logins} logins/week)**: " +
-                ("Active digital participation! Excellent LMS login frequency." if lms_logins >= 25
-                 else "Low digital engagement. Try logging in daily to access learning resources.") + "\n"
-                f"*   **Mock Exams ({mock_exams}/100)**: " +
-                ("Strong quiz baseline. Good performance under mock constraints." if mock_exams >= 70
-                 else "Mock baseline is low. Focus on taking simulated prep tests to get comfortable with question formats.") + "\n\n"
-                "#### 2. Custom 4-Week Action Planner\n"
-                "*   **Week 1 (Establish Foundations)**: Allocate 45 minutes daily to review notes immediately after class. Focus on outstanding assignments.\n"
-                "*   **Week 2 (Target Weak Areas)**: Form a study group or attend office hours to address topics where previous marks were dropped.\n"
-                "*   **Week 3 (Practice & Reinforce)**: Solve previous practice tests under exam conditions to build time-management confidence.\n"
-                "*   **Week 4 (Review & Optimize)**: Focus on light retrieval practice. Get at least 8 hours of sleep before exam day.\n\n"
-                "#### 3. Recommended Daily Habits\n"
-                "1.  **Pomodoro Study Method**: Work in 25-minute blocks with 5-minute breaks to maintain focus.\n"
-                "2.  **Mistake Journaling**: Track incorrect practice answers and solve them from scratch twice.\n"
-                "3.  **Active Recall**: Verbally summarize what you learned in class without looking at your slides."
-            )
-            if rl_markdown:
-                mock_plan = mock_plan + "\n---\n\n" + rl_markdown
-            return jsonify({
-                "success": True,
-                "advice": mock_plan,
-                "is_mock": True
-            })
-
-        # Set up Gemini model
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        # Agentic RAG ReAct Loop Execution
+        from models.agentic_rag import run_react_agent
+        student_profile = {
+            "study_hours": study_hours,
+            "attendance": attendance,
+            "previous_marks": previous_marks,
+            "assignments_completed": assignments_completed,
+            "sleep_hours": sleep_hours,
+            "lms_logins": lms_logins,
+            "mock_exams": mock_exams,
+            "predicted_score": predicted_score,
+            "burnout_risk": burnout_risk
+        }
         
-        # Construct Prompt
-        prompt = (
-            "You are EduPredict Advisor, an expert academic counselor. "
-            "Analyze the following student profile and generate a highly personalized, structured study advisory report in clean Markdown:\n\n"
-            f"- Daily Study Hours: {study_hours} hours/day (target/max: 12)\n"
-            f"- Class Attendance: {attendance}%\n"
-            f"- Previous Exam Marks: {previous_marks}/100\n"
-            f"- Assignments Completed: {assignments_completed}/10\n"
-            f"- Average Sleep Hours: {sleep_hours} hours/day\n"
-            f"- Weekly LMS Logins: {lms_logins}\n"
-            f"- Latest Mock Exam Score: {mock_exams}/100\n"
-            f"- AI Predicted Final Exam Score: {predicted_score}/100\n"
-            f"- Predicted Student Burnout Risk Category: {burnout_risk}\n\n"
-            "--- Struggle Zone Context (Retrieval-Augmented Reference Material) ---\n"
-            f"{rag_context}\n\n"
-            "Include these exact three sections, using headers:\n"
-            "1. Strength & Risk Factor Analysis: Analyze their metrics. Compare parameters and point out major areas causing lower scores vs. areas keeping them afloat. Make sure to address their predicted Burnout Risk category and offer advice accordingly.\n"
-            "2. Custom 4-Week Action Planner: A specific, week-by-week plan detailing study subjects or practices to raise their grade. You MUST reference the exact textbook page numbers, chapter names, or lecture slide links retrieved in the Struggle Zone Context above to make this plan highly actionable.\n"
-            "3. Recommended Daily Habits: Provide 3-4 specific behavioral habits (e.g. Pomodoro, active recall, sleep guidelines) based on their profile.\n\n"
-            "Keep the tone motivational, specific, and actionable. Use bullet points and clean formatting. Do not use generic advice. Do not use any emojis or emoticons in the output."
-        )
-
-        response = model.generate_content(prompt)
-        advice_text = response.text
+        final_advice, agent_logs = run_react_agent(student_profile, api_key=GEMINI_API_KEY)
+        
         if rl_markdown:
-            advice_text = advice_text + "\n---\n\n" + rl_markdown
-
+            final_advice = final_advice + "\n---\n\n" + rl_markdown
+            
         return jsonify({
             "success": True,
-            "advice": advice_text,
-            "is_mock": False
+            "advice": final_advice,
+            "agent_logs": agent_logs,
+            "is_mock": not bool(GEMINI_API_KEY)
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
