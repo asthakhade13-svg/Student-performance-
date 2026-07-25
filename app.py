@@ -627,8 +627,8 @@ def predict():
                 N_batch = X_batch.shape[0]
                 
                 df_temp = pd.concat([student_df] * N_batch, ignore_index=True)
-                df_temp["attendance"] = X_batch[:, 0]
-                df_temp["previous_marks"] = X_batch[:, 1]
+                for idx_c, col in enumerate(FEATURE_COLS):
+                    df_temp[col] = X_batch[:, idx_c]
                 
                 seq, _, _ = get_seq_and_static_data(df_temp)
                 N_b, T_b, F_b = seq.shape
