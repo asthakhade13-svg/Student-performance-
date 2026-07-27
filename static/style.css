@@ -366,9 +366,18 @@ body {
   color: var(--muted); font-size: 0.8rem; cursor: pointer; transition: all 0.2s;
 }
 .refresh-btn:hover { color: var(--text); border-color: rgba(0,0,0,0.2); }
-.table-wrap { overflow-x: auto; }
+.table-wrap { 
+  overflow-x: auto; 
+  max-height: 450px; 
+  overflow-y: auto; 
+  border-radius: 8px;
+}
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 2;
   padding: 12px 16px; text-align: left;
   font-size: 0.7rem; font-weight: 700;
   color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
