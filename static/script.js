@@ -1013,6 +1013,18 @@ function parseMarkdown(md) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 
+  // Restore allowed diagnostics HTML tags
+  html = html
+    .replace(/&lt;details(.*?)&gt;/g, '<details$1>')
+    .replace(/&lt;\/details&gt;/g, '</details>')
+    .replace(/&lt;summary(.*?)&gt;/g, '<summary$1>')
+    .replace(/&lt;\/summary&gt;/g, '</summary>')
+    .replace(/&lt;div(.*?)&gt;/g, '<div$1>')
+    .replace(/&lt;\/div&gt;/g, '</div>')
+    .replace(/&lt;br\s*\/&gt;/g, '<br/>')
+    .replace(/&lt;strong&gt;/g, '<strong>')
+    .replace(/&lt;\/strong&gt;/g, '</strong>');
+
   // Re-allow blockquotes since we escaped '>'
   html = html.replace(/^&gt;\s*(.*)$/gm, '<blockquote>$1</blockquote>');
   
