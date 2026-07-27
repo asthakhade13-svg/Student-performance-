@@ -412,12 +412,14 @@ def train_pytorch_model(df, model_path):
     
     cv = min(5, len(df))
     mae_list = []
-    r2_list = []
     
     adv_criterion = nn.CrossEntropyLoss()
     
     if cv >= 2:
         kf = KFold(n_splits=cv, shuffle=True, random_state=42)
+        all_val_preds = np.zeros(len(df))
+        all_val_trues = np.zeros(len(df))
+        
         for train_idx, val_idx in kf.split(seq_data):
             s_tr, s_val = seq_data_scaled[train_idx], seq_data_scaled[val_idx]
             yr_tr, yr_val = y_reg_scaled[train_idx], y_reg_scaled[val_idx]
@@ -436,7 +438,7 @@ def train_pytorch_model(df, model_path):
             idx_val, off_val = prepare_text_tensors(notes_val)
             
             model = StudentTransformerLSTM()
-            optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-4)
+            optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
             reg_criterion = nn.MSELoss()
             clf_criterion = nn.CrossEntropyLoss()
             
@@ -459,8 +461,8 @@ def train_pytorch_model(df, model_path):
                 loss_dist = adv_criterion(dist_logits, torch.tensor(d_tr, dtype=torch.long))
                 loss_gend = adv_criterion(gend_logits, torch.tensor(g_tr, dtype=torch.long))
                 
-                # Combine losses: GRL forces encoder features to be district- and gender-invariant
-                loss = loss_reg + 1.0 * loss_clf + 0.5 * loss_dist + 0.5 * loss_gend
+                # Combine losses: Prioritize regression target while regularizing for grade groups and demographics
+                loss = 5.0 * loss_reg + 0.5 * loss_clf + 0.1 * loss_dist + 0.1 * loss_gend
                 loss.backward()
                 optimizer.step()
                 
@@ -472,18 +474,20 @@ def train_pytorch_model(df, model_path):
                 yr_val_unscaled = scaler_y.inverse_transform(yr_val)
                 
                 mae_list.append(mean_absolute_error(yr_val_unscaled, pred_reg_val_unscaled))
-                r2_list.append(r2_score(yr_val_unscaled, pred_reg_val_unscaled))
+                all_val_preds[val_idx] = pred_reg_val_unscaled.flatten()
+                all_val_trues[val_idx] = yr_val_unscaled.flatten()
                 
         mae_mean = float(np.mean(mae_list))
         mae_std = float(np.std(mae_list))
-        r2_mean = max(-1.0, float(np.mean(r2_list)))
+        r2_mean = float(r2_score(all_val_trues, all_val_preds))
+        r2_mean = max(-1.0, min(1.0, r2_mean))
     else:
         mae_mean = 5.0
         mae_std = 0.0
         r2_mean = 0.5
         
     final_model = StudentTransformerLSTM()
-    optimizer = torch.optim.Adam(final_model.parameters(), lr=0.01, weight_decay=1e-4)
+    optimizer = torch.optim.Adam(final_model.parameters(), lr=0.001, weight_decay=1e-4)
     reg_criterion = nn.MSELoss()
     clf_criterion = nn.CrossEntropyLoss()
     
@@ -507,7 +511,8 @@ def train_pytorch_model(df, model_path):
         loss_dist = adv_criterion(dist_logits, torch.tensor(districts, dtype=torch.long))
         loss_gend = adv_criterion(gend_logits, torch.tensor(genders, dtype=torch.long))
         
-        loss = loss_reg + 1.0 * loss_clf + 0.5 * loss_dist + 0.5 * loss_gend
+        # Combine losses: Prioritize regression target while regularizing for grade groups and demographics
+        loss = 5.0 * loss_reg + 0.5 * loss_clf + 0.1 * loss_dist + 0.1 * loss_gend
         loss.backward()
         optimizer.step()
         
