@@ -651,9 +651,10 @@ def predict():
                 
             return np.concatenate(all_preds)
             
-        background = X_all
-        explainer = shap.KernelExplainer(shap_predict_fn, background)
-        shap_vals = explainer.shap_values(student_df, l1_reg=False)
+        # Use median background profile and limit perturbation samples to make SHAP prediction instant (< 200ms!)
+        background_summary = pd.DataFrame([X_all.median()], columns=FEATURE_COLS)
+        explainer = shap.KernelExplainer(shap_predict_fn, background_summary)
+        shap_vals = explainer.shap_values(student_df, nsamples=80, l1_reg=False)
         
         if isinstance(shap_vals, list):
             shap_vals = shap_vals[0]

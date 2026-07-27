@@ -231,8 +231,13 @@ body {
 /* ── RESULT CARD ──────────────────────────────────────── */
 .result-card {
   display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
+  align-items: center; justify-content: flex-start;
   min-height: 420px;
+  max-height: 720px;
+  overflow-y: auto;
+  padding: 28px 20px;
+  scrollbar-width: thin;
+  scroll-behavior: smooth;
 }
 .result-placeholder {
   text-align: center; color: var(--muted);

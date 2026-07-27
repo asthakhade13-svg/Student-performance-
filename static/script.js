@@ -372,6 +372,14 @@ function showResult(data) {
       }, 100 + idx * 80);
     });
   }
+
+  // Smooth scroll to result card after a short delay for rendering
+  const resultCard = document.getElementById('result-card');
+  if (resultCard) {
+    setTimeout(() => {
+      resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 350);
+  }
 }
 
 function renderWaterfallPlot(data) {
