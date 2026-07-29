@@ -173,7 +173,7 @@ body {
 .form-card { 
   display: flex; 
   flex-direction: column; 
-  min-height: 750px;
+  min-height: 900px;
 }
 .form-fields { flex: 1; display: flex; flex-direction: column; gap: 24px; margin: 24px 0; }
 
@@ -236,8 +236,8 @@ body {
 .result-card {
   display: flex; flex-direction: column;
   align-items: center; justify-content: flex-start;
-  min-height: 750px;
-  max-height: 750px;
+  min-height: 900px;
+  max-height: 900px;
   overflow-y: auto;
   padding: 28px;
   scrollbar-width: thin;
@@ -741,7 +741,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 320px;
+  max-height: 480px;
   overflow-y: auto;
   padding-right: 6px;
 }
