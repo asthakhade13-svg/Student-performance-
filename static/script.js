@@ -1092,6 +1092,14 @@ function parseMarkdown(md) {
   if (!md) return '';
   let html = md;
   
+  const isAdmin = document.getElementById('admin-mode-toggle') ? document.getElementById('admin-mode-toggle').checked : false;
+  if (!isAdmin) {
+    // Strip diagnostic details block
+    html = html.replace(/<details\b[^>]*>([\s\S]*?)<\/details>/gi, '');
+    // Strip multi-agent RL simulation details up to end
+    html = html.replace(/(?:###?\s*(?:🎯\s*)?Multi-Agent\s+RL\s+Cooperative[\s\S]*)$/i, '');
+  }
+
   // Basic escaping for security
   html = html
     .replace(/&/g, "&amp;")
