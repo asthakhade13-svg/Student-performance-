@@ -129,9 +129,24 @@ body {
   padding: 40px 24px 80px;
 }
 
-.tab-content { display: none; animation: fadeIn 0.3s ease; }
-.tab-content.active { display: block; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.tab-content {
+  display: none;
+  opacity: 0;
+  transform: translate3d(20px, 0, 0);
+  transition: opacity 220ms cubic-bezier(0.25, 0.8, 0.25, 1), transform 220ms cubic-bezier(0.25, 0.8, 0.25, 1);
+  will-change: opacity, transform;
+}
+.tab-content.active {
+  display: block;
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+.tab-content.exiting {
+  display: block;
+  opacity: 0;
+  transform: translate3d(-20px, 0, 0);
+  pointer-events: none;
+}
 
 /* ── HERO ────────────────────────────────────────────── */
 .hero { text-align: center; margin-bottom: 48px; }
@@ -959,4 +974,82 @@ body {
   pointer-events: none;
   filter: grayscale(0.5);
   transition: all 0.3s ease;
+}
+
+/* ── ULTRA-SMOOTH HARDWARE SCROLLING ENGINE ───────────────── */
+html {
+  scroll-behavior: smooth;
+}
+.result-card, .table-wrap, .shap-list {
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  will-change: scroll-position;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── TACTILE MICRO-INTERACTIONS & RIPPLE OVERLAYS ────────── */
+.predict-btn, .nav-btn, .add-btn, .refresh-btn, .delete-btn, .rollback-btn, .ai-generate-btn, button, .btn {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.12s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.12s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.12s cubic-bezier(0.25, 0.8, 0.25, 1);
+  cursor: pointer;
+  outline: none;
+}
+.predict-btn:active, .nav-btn:active, .add-btn:active, .refresh-btn:active, .delete-btn:active, .rollback-btn:active, .ai-generate-btn:active, button:active, .btn:active {
+  transform: scale(0.96) translateY(0) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Ripple effect span */
+.btn-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  transform: scale(0);
+  animation: ripple-effect 0.55s ease-out;
+  pointer-events: none;
+}
+@keyframes ripple-effect {
+  to {
+    transform: scale(3.5);
+    opacity: 0;
+  }
+}
+
+/* Optimistic Quiz Feedback Success Pulse */
+@keyframes pulse-green {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+.optimistic-success {
+  animation: pulse-green 0.8s ease-out;
+  background: #059669 !important;
+}
+
+/* ── STRIPE/LINEAR SHIMMER SKELETON LOADERS ───────────────── */
+.skeleton-shimmer {
+  animation: fadeIn 0.25s ease-out;
+}
+.skeleton-circle, .skeleton-bar {
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.04) 25%, rgba(0, 0, 0, 0.08) 50%, rgba(0, 0, 0, 0.04) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+/* Shimmer dark-mode glass override */
+@media (prefers-color-scheme: dark) {
+  .skeleton-circle, .skeleton-bar {
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 25%, rgba(255, 255, 255, 0.12) 50%, rgba(255, 255, 255, 0.05) 75%);
+    background-size: 200% 100%;
+  }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Invalid Live Input Outline Validation */
+.invalid-input {
+  border-color: rgba(239, 68, 68, 0.5) !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
 }

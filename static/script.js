@@ -3,6 +3,30 @@
    Handles: tabs, predict, dataset CRUD, insights chart
 ════════════════════════════════════════════════════════ */
 
+// Premium Request Cache Manager (Stale-While-Revalidate pattern)
+const requestCache = new Map();
+
+async function cachedFetch(url, options = {}) {
+  const cacheKey = url + (options.body ? `_${options.body}` : '');
+  
+  if (requestCache.has(cacheKey)) {
+    const cachedData = requestCache.get(cacheKey);
+    fetch(url, options)
+      .then(res => res.json())
+      .then(data => {
+        requestCache.set(cacheKey, data);
+      }).catch(err => console.warn('Background refetch failed:', err));
+      
+    return cachedData;
+  }
+  
+  const res = await fetch(url, options);
+  const data = await res.json();
+  requestCache.set(cacheKey, data);
+  return data;
+}
+
+
 // ── TAB NAVIGATION ────────────────────────────────────
 document.querySelectorAll('.nav-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -12,13 +36,32 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 });
 
 function switchTab(tab) {
+  const currentActive = document.querySelector('.tab-content.active');
+  const targetTab = document.getElementById(`tab-${tab}`);
+  
+  if (currentActive === targetTab) return;
+  
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.getElementById(`nav-${tab}`).classList.add('active');
-  document.getElementById(`tab-${tab}`).classList.add('active');
-  if (tab === 'dataset')  loadDataset();
-  if (tab === 'insights') loadInsights();
-  if (tab === 'mlops')    loadMLOps();
+  
+  if (currentActive) {
+    currentActive.classList.add('exiting');
+    currentActive.classList.remove('active');
+    
+    setTimeout(() => {
+      currentActive.classList.remove('exiting');
+      
+      targetTab.classList.add('active');
+      if (tab === 'dataset')  loadDataset();
+      if (tab === 'insights') loadInsights();
+      if (tab === 'mlops')    loadMLOps();
+    }, 220); // Syncs with CSS transition speed (220ms)
+  } else {
+    targetTab.classList.add('active');
+    if (tab === 'dataset')  loadDataset();
+    if (tab === 'insights') loadInsights();
+    if (tab === 'mlops')    loadMLOps();
+  }
 }
 
 // ── SLIDER LIVE LABELS ────────────────────────────────
@@ -71,6 +114,16 @@ async function runPrediction() {
     payload[`mock_exams_w${w}`] =            parseFloat(document.getElementById(`mock_exams_w${w}`).value) || 0;
   }
 
+  const skeletonTimeout = setTimeout(() => {
+    document.getElementById('result-placeholder').classList.add('hidden');
+    document.getElementById('result-content').classList.add('hidden');
+    const skeleton = document.getElementById('prediction-skeleton');
+    if (skeleton) {
+      skeleton.style.display = 'flex';
+      skeleton.classList.remove('hidden');
+    }
+  }, 200);
+
   try {
     const res  = await fetch('/api/predict', {
       method: 'POST',
@@ -86,6 +139,12 @@ async function runPrediction() {
   } catch (e) {
     showToast('Could not connect to server.');
   } finally {
+    clearTimeout(skeletonTimeout);
+    const skeleton = document.getElementById('prediction-skeleton');
+    if (skeleton) {
+      skeleton.style.display = 'none';
+      skeleton.classList.add('hidden');
+    }
     btn.classList.remove('loading');
     btn.querySelector('span:last-child').textContent = 'Predict Score';
   }
@@ -97,6 +156,11 @@ let lastPredictionResult = null;
 function showResult(data) {
   lastPredictionResult = data;
   document.getElementById('result-placeholder').classList.add('hidden');
+  const skeleton = document.getElementById('prediction-skeleton');
+  if (skeleton) {
+    skeleton.style.display = 'none';
+    skeleton.classList.add('hidden');
+  }
   const content = document.getElementById('result-content');
   content.classList.remove('hidden');
   const advisorCard = document.getElementById('ai-advisor-card');
@@ -581,8 +645,7 @@ function animateCounter(id, from, to, duration) {
 // ── DATASET ───────────────────────────────────────────
 async function loadDataset() {
   try {
-    const res  = await fetch('/api/dataset');
-    const data = await res.json();
+    const data = await cachedFetch('/api/dataset');
     if (data.success) renderTable(data.data);
   } catch (e) {
     document.getElementById('table-body').innerHTML =
@@ -650,6 +713,7 @@ async function addStudent() {
     const data = await res.json();
     if (data.success) {
       showFeedback('add-feedback', 'success', data.message);
+      requestCache.delete('/api/dataset');
       loadDataset();
       showToast('Student added and model retrained!');
     } else {
@@ -666,6 +730,7 @@ async function deleteStudent(index) {
     const res  = await fetch(`/api/delete-student/${index}`, { method: 'DELETE' });
     const data = await res.json();
     if (data.success) {
+      requestCache.delete('/api/dataset');
       loadDataset();
       showToast('Record deleted and model retrained!');
     } else {
@@ -686,8 +751,7 @@ function showFeedback(id, type, msg) {
 // ── INSIGHTS ──────────────────────────────────────────
 async function loadInsights() {
   try {
-    const res  = await fetch('/api/feature-importance');
-    const data = await res.json();
+    const data = await cachedFetch('/api/feature-importance');
     if (data.success) renderInsights(data);
   } catch (e) {
     document.getElementById('chart-bars').innerHTML =
@@ -795,8 +859,7 @@ async function loadMLOps() {
   tbody.innerHTML = '<tr><td colspan="6" class="loading-row">Loading registry runs…</td></tr>';
   
   try {
-    const res  = await fetch('/api/mlops/history');
-    const data = await res.json();
+    const data = await cachedFetch('/api/mlops/history');
     if (data.success) {
       renderMLOpsDashboard(data);
       loadActiveLearningQueue();
@@ -885,6 +948,7 @@ async function rollbackToVersion(version) {
     const data = await res.json();
     if (data.success) {
       showToast(`Successfully activated model version ${version}!`);
+      requestCache.delete('/api/mlops/history');
       loadMLOps();
     } else {
       showToast('Rollback failed: ' + data.error);
@@ -905,6 +969,7 @@ async function triggerManualRetrain() {
     const data = await res.json();
     if (data.success) {
       showToast(`Model retrained successfully! Version ${data.active_version} created.`);
+      requestCache.delete('/api/mlops/history');
       loadMLOps();
     } else {
       showToast('Retrain failed: ' + data.error);
@@ -936,6 +1001,15 @@ async function generateAISuggestions() {
   spinner.classList.remove('hidden');
   responseText.innerHTML = '';
 
+  const skeletonTimeout = setTimeout(() => {
+    if (spinner) spinner.classList.add('hidden');
+    const skeleton = document.getElementById('ai-skeleton');
+    if (skeleton) {
+      skeleton.style.display = 'flex';
+      skeleton.classList.remove('hidden');
+    }
+  }, 200);
+
   try {
     const rlToggle = document.getElementById('rl_advisor_toggle');
     const advicePayload = {
@@ -950,6 +1024,11 @@ async function generateAISuggestions() {
     });
     const data = await res.json();
     if (data.success) {
+      const skeleton = document.getElementById('ai-skeleton');
+      if (skeleton) {
+        skeleton.style.display = 'none';
+        skeleton.classList.add('hidden');
+      }
       responseText.innerHTML = parseMarkdown(data.advice);
       
       // Render Agent ReAct Console Logs
@@ -999,6 +1078,12 @@ async function generateAISuggestions() {
     generateBtn.classList.remove('hidden');
     contentArea.classList.add('hidden');
   } finally {
+    clearTimeout(skeletonTimeout);
+    const skeleton = document.getElementById('ai-skeleton');
+    if (skeleton) {
+      skeleton.style.display = 'none';
+      skeleton.classList.add('hidden');
+    }
     spinner.classList.add('hidden');
   }
 }
@@ -1147,6 +1232,12 @@ document.addEventListener('DOMContentLoaded', () => {
   bindSliders();
   injectRingGradient();
   fetchActiveModelVersion();
+  setupLiveValidation();
+  
+  // Initial check for prefers-reduced-motion
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.querySelectorAll('.orb').forEach(orb => orb.style.animation = 'none');
+  }
   
   const zsToggle = document.getElementById('zero_shot_toggle');
   if (zsToggle) {
@@ -1452,36 +1543,41 @@ async function calculateCounterfactualRecourse() {
   }
 }
 
+let currentDKTAlgebra = 0.6;
+let currentDKTCalculus = 0.55;
+let currentDKTMechanics = 0.58;
+
+function redrawDKTRadar(pAlg, pCalc, pMech) {
+  document.getElementById('dkt-val-algebra').textContent = (pAlg * 100).toFixed(1) + '%';
+  document.getElementById('dkt-val-calculus').textContent = (pCalc * 100).toFixed(1) + '%';
+  document.getElementById('dkt-val-mechanics').textContent = (pMech * 100).toFixed(1) + '%';
+  
+  // Calculate radar polygon coordinates
+  const x1 = 70;
+  const y1 = 70 - 60 * pAlg;
+  
+  const x2 = 70 + 51.96 * pCalc;
+  const y2 = 70 + 30.00 * pCalc;
+  
+  const x3 = 70 - 51.96 * pMech;
+  const y3 = 70 + 30.00 * pMech;
+  
+  const poly = document.getElementById('dkt-poly');
+  if (poly) {
+    poly.setAttribute('points', `${x1.toFixed(1)},${y1.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)} ${x3.toFixed(1)},${y3.toFixed(1)}`);
+  }
+}
+
 async function loadDKTMastery(studentId) {
   try {
-    const res = await fetch(`/api/dkt/mastery/${encodeURIComponent(studentId)}`);
-    const data = await res.json();
+    const data = await cachedFetch(`/api/dkt/mastery/${encodeURIComponent(studentId)}`);
     if (data.success && data.mastery) {
       const mastery = data.mastery;
+      currentDKTAlgebra = mastery.Algebra !== undefined ? mastery.Algebra : 0.6;
+      currentDKTCalculus = mastery.Calculus !== undefined ? mastery.Calculus : 0.55;
+      currentDKTMechanics = mastery.Mechanics !== undefined ? mastery.Mechanics : 0.58;
       
-      const pAlg = mastery.Algebra !== undefined ? mastery.Algebra : 0.6;
-      const pCalc = mastery.Calculus !== undefined ? mastery.Calculus : 0.55;
-      const pMech = mastery.Mechanics !== undefined ? mastery.Mechanics : 0.58;
-      
-      // Update label displays
-      document.getElementById('dkt-val-algebra').textContent = (pAlg * 100).toFixed(1) + '%';
-      document.getElementById('dkt-val-calculus').textContent = (pCalc * 100).toFixed(1) + '%';
-      document.getElementById('dkt-val-mechanics').textContent = (pMech * 100).toFixed(1) + '%';
-      
-      // Calculate radar polygon coordinates
-      const x1 = 70;
-      const y1 = 70 - 60 * pAlg;
-      
-      const x2 = 70 + 51.96 * pCalc;
-      const y2 = 70 + 30.00 * pCalc;
-      
-      const x3 = 70 - 51.96 * pMech;
-      const y3 = 70 + 30.00 * pMech;
-      
-      const poly = document.getElementById('dkt-poly');
-      if (poly) {
-        poly.setAttribute('points', `${x1.toFixed(1)},${y1.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)} ${x3.toFixed(1)},${y3.toFixed(1)}`);
-      }
+      redrawDKTRadar(currentDKTAlgebra, currentDKTCalculus, currentDKTMechanics);
     }
   } catch (e) {
     console.error("Failed to load DKT mastery data:", e);
@@ -1497,6 +1593,21 @@ async function submitQuizResponse() {
   const skillId = skillSelect.value;
   const isCorrect = parseInt(outcomeSelect.value);
   
+  // Optimistic UI Update
+  const shift = isCorrect ? 0.08 : -0.05;
+  if (skillId === 'Algebra') currentDKTAlgebra = Math.max(0.1, Math.min(1.0, currentDKTAlgebra + shift));
+  else if (skillId === 'Calculus') currentDKTCalculus = Math.max(0.1, Math.min(1.0, currentDKTCalculus + shift));
+  else if (skillId === 'Mechanics') currentDKTMechanics = Math.max(0.1, Math.min(1.0, currentDKTMechanics + shift));
+  
+  redrawDKTRadar(currentDKTAlgebra, currentDKTCalculus, currentDKTMechanics);
+  
+  // Immediate visual tactile feedback: pulse glow on button
+  const logBtn = document.querySelector('button[onclick="submitQuizResponse()"]');
+  if (logBtn) {
+    logBtn.classList.add('optimistic-success');
+    setTimeout(() => logBtn.classList.remove('optimistic-success'), 800);
+  }
+  
   try {
     const res = await fetch('/api/dkt/log-quiz', {
       method: 'POST',
@@ -1511,8 +1622,15 @@ async function submitQuizResponse() {
     const data = await res.json();
     if (data.success) {
       showToast(`Logged quiz response. Updated DKT mastery!`);
+      // Update cache manually with the new mastery values
+      const cacheKey = `/api/dkt/mastery/${encodeURIComponent(studentId)}`;
+      requestCache.set(cacheKey, { success: true, mastery: data.mastery });
+      
       if (data.mastery) {
-        loadDKTMastery(studentId);
+        currentDKTAlgebra = data.mastery.Algebra !== undefined ? data.mastery.Algebra : currentDKTAlgebra;
+        currentDKTCalculus = data.mastery.Calculus !== undefined ? data.mastery.Calculus : currentDKTCalculus;
+        currentDKTMechanics = data.mastery.Mechanics !== undefined ? data.mastery.Mechanics : currentDKTMechanics;
+        redrawDKTRadar(currentDKTAlgebra, currentDKTCalculus, currentDKTMechanics);
       }
     } else {
       showToast('Failed to log quiz response: ' + data.error);
@@ -1521,3 +1639,94 @@ async function submitQuizResponse() {
     showToast('Could not connect to quiz logger API.');
   }
 }
+
+// ── DEBOUNCE UTILITY ──────────────────────────────────
+function debounce(func, wait) {
+  let timeout;
+  return function(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), wait);
+  };
+}
+
+// ── LIVE VALIDATION ───────────────────────────────────
+function setupLiveValidation() {
+  const inputs = document.querySelectorAll('input[type="number"], .table-input');
+  inputs.forEach(input => {
+    input.addEventListener('input', debounce(() => {
+      validateField(input);
+    }, 250));
+  });
+}
+
+function validateField(input) {
+  const val = parseFloat(input.value);
+  let isValid = true;
+  
+  if (input.id.startsWith('study_hours') || input.id === 'add-study') {
+    if (isNaN(val) || val < 0 || val > 24) isValid = false;
+  } else if (input.id.startsWith('sleep_hours') || input.id === 'add-sleep') {
+    if (isNaN(val) || val < 0 || val > 24) isValid = false;
+  } else if (input.id.startsWith('assignments_completed') || input.id === 'add-assignments') {
+    if (isNaN(val) || val < 0 || val > 10) isValid = false;
+  } else if (input.id.startsWith('mock_exams') || input.id === 'add-mock' || input.id === 'add-score') {
+    if (isNaN(val) || val < 0 || val > 100) isValid = false;
+  } else if (input.id.startsWith('lms_logins') || input.id === 'add-lms') {
+    if (isNaN(val) || val < 0) isValid = false;
+  }
+  
+  if (!isValid) {
+    input.classList.add('invalid-input');
+  } else {
+    input.classList.remove('invalid-input');
+  }
+}
+
+// ── GLOBAL RIPPLE EFFECT ──────────────────────────────
+document.body.addEventListener('click', (e) => {
+  const target = e.target.closest('button, .btn, .nav-btn, .predict-btn, .add-btn, .refresh-btn, .delete-btn, .rollback-btn');
+  if (!target) return;
+  
+  const ripple = document.createElement('span');
+  ripple.classList.add('btn-ripple');
+  
+  const rect = target.getBoundingClientRect();
+  const size = Math.max(rect.width, rect.height);
+  const x = e.clientX - rect.left - size / 2;
+  const y = e.clientY - rect.top - size / 2;
+  
+  ripple.style.width = ripple.style.height = `${size}px`;
+  ripple.style.left = `${x}px`;
+  ripple.style.top = `${y}px`;
+  
+  target.appendChild(ripple);
+  
+  setTimeout(() => {
+    ripple.remove();
+  }, 600);
+});
+
+// ── ACCESSIBILITY & RESOURCE CONSERVATION ──────────────
+document.addEventListener('visibilitychange', () => {
+  const orbs = document.querySelectorAll('.orb');
+  const playState = document.hidden ? 'paused' : 'running';
+  orbs.forEach(orb => {
+    orb.style.animationPlayState = playState;
+  });
+});
+
+const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+function handleReducedMotion(e) {
+  const orbs = document.querySelectorAll('.orb');
+  if (e.matches) {
+    orbs.forEach(orb => {
+      orb.style.animation = 'none';
+    });
+  } else {
+    document.querySelectorAll('.orb-1').forEach(o => o.style.animation = 'float 20s ease-in-out infinite');
+    document.querySelectorAll('.orb-2').forEach(o => o.style.animation = 'float 20s ease-in-out infinite -8s');
+    document.querySelectorAll('.orb-3').forEach(o => o.style.animation = 'float 20s ease-in-out infinite -14s');
+  }
+}
+mediaQuery.addEventListener('change', handleReducedMotion);
+
