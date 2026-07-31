@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 
 REACT_SYSTEM_PROMPT = """You are EduPredict Advisor, an autonomous academic agent. Your task is to analyze a student's profile and generate a highly personalized study advisory report.
+You must include a detailed 'Custom 4-Week Action Planner & Study Instructions' section, providing week-wise daily tasks, methods (e.g. active recall, spaced repetition, Feynman technique), specific chapter references, and targeted study/sleep hour adjustments to help the student improve their grades.
+
 You have access to the following tools:
 
 1. search_learning_materials(query: str) -> str: Searches syllabus and textbook chunks.
@@ -105,11 +107,27 @@ def run_react_agent(student_profile, api_key=None):
             f"*   **Attendance ({student_profile['attendance']}%)**: " +
             ("Excellent attendance! You are attending class regularly." if student_profile['attendance'] >= 85 else "Moderate attendance. Try to attend every class session to participate in retrieval exercises.") + "\n"
             f"*   **Assignments completed ({student_profile['assignments_completed']}/10)**: You are currently below the cohort benchmark. Focus on daily learning routines to complete all homework sets.\n\n"
-            f"#### 2. Custom 4-Week Action Planner\n"
-            f"*   **Week 1 (Establish Foundations)**: Allocate 45 minutes daily to review notes immediately after class. Focus on outstanding assignments.\n"
-            f"*   **Week 2 (Target Weak Areas)**: Address topics where mock scores dropped. Read **Chapter 4: Assignment Performance & Mastery (Pages 131-180)**.\n"
-            f"*   **Week 3 (Practice & Reinforce)**: Solve previous practice tests under exam conditions. Read **Chapter 5: Mock Exams & Test Strategy (Pages 181-220)**.\n"
-            f"*   **Week 4 (Review & Optimize)**: Focus on active retrieval practice. Ensure at least 8 hours of sleep before exam day.\n\n"
+            f"#### 2. Custom 4-Week Action Planner & Study Instructions\n"
+            f"*   **Week 1: Establish Foundations & Habit Baseline**\n"
+            f"    *   *Study Hours Target*: Increase daily study by 30 mins (total {student_profile['study_hours'] + 0.5:.1f}h/day).\n"
+            f"    *   *Daily Task*: Review lecture slides immediately after class. Solve at least 2 unsolved problems from the daily class worksheets.\n"
+            f"    *   *Method*: Use **Active Recall** (write down key concepts from memory before looking at slides).\n"
+            f"    *   *Focus*: Complete all pending formative assignments to hit the cohort benchmark.\n"
+            f"*   **Week 2: Target Weak Areas & Concept Comprehension**\n"
+            f"    *   *Study Hours Target*: Maintain {student_profile['study_hours'] + 0.5:.1f}h/day.\n"
+            f"    *   *Daily Task*: Identify topics in Mock Exams where marks dropped. Read **Chapter 4: Assignment Performance & Mastery (Pages 131-180)**.\n"
+            f"    *   *Method*: Apply the **Feynman Technique** (explain difficult concepts out loud in simple terms to test your own understanding).\n"
+            f"    *   *Focus*: Algebra & basic problem-solving mastery.\n"
+            f"*   **Week 3: Practice, Reinforce & Simulation**\n"
+            f"    *   *Study Hours Target*: Optimize study to {student_profile['study_hours'] + 1.0:.1f}h/day.\n"
+            f"    *   *Daily Task*: Solve previous years' practice exams under strict exam conditions (no notes, timed 90-minute slot). Read **Chapter 5: Mock Exams & Test Strategy (Pages 181-220)**.\n"
+            f"    *   *Method*: **Spaced Repetition** (re-review incorrect mock questions at 2-day intervals).\n"
+            f"    *   *Focus*: Calculus and Mechanics mastery flow.\n"
+            f"*   **Week 4: Review, Optimize & Wellness Integration**\n"
+            f"    *   *Study Hours Target*: Maintain focused revision blocks ({student_profile['study_hours'] + 0.5:.1f}h/day).\n"
+            f"    *   *Daily Task*: Focus on active retrieval of core formulas. Review the error journal to avoid repeating past mistakes.\n"
+            f"    *   *Method*: Sleep optimization. Prioritize getting at least 7.5 to 8 hours of sleep to assist memory consolidation.\n"
+            f"    *   *Focus*: Final exam readiness and confidence optimization.\n\n"
             f"#### 3. Recommended Daily Habits\n"
             f"1.  **Active Recall**: Verbalize lecture points without looking at slides.\n"
             f"2.  **Mistake Journaling**: Redo incorrect mock exam questions from scratch twice.\n"
