@@ -1122,6 +1122,8 @@ function parseMarkdown(md) {
   html = html.replace(/^&gt;\s*(.*)$/gm, '<blockquote>$1</blockquote>');
   
   // Headings
+  html = html.replace(/^######\s+(.*)$/gm, '<h6>$1</h6>');
+  html = html.replace(/^#####\s+(.*)$/gm, '<h5>$1</h5>');
   html = html.replace(/^####\s+(.*)$/gm, '<h4>$1</h4>');
   html = html.replace(/^###\s+(.*)$/gm, '<h3>$1</h3>');
   html = html.replace(/^##\s+(.*)$/gm, '<h2>$1</h2>');
@@ -1141,7 +1143,7 @@ function parseMarkdown(md) {
     
     // Unordered list items: starts with * or -
     if (/^[\*\-]\s+(.*)$/.test(line)) {
-      lines[i] = lines[i].replace(/^[\*\-]\s+(.*)$/, '<li>$1</li>');
+      lines[i] = '<li>' + line.substring(line.indexOf(' ') + 1).trim() + '</li>';
       if (!inUl) {
         lines[i] = '<ul>' + lines[i];
         inUl = true;
@@ -1153,7 +1155,7 @@ function parseMarkdown(md) {
     } 
     // Ordered list items: starts with digits + dot
     else if (/^\d+\.\s+(.*)$/.test(line)) {
-      lines[i] = lines[i].replace(/^\d+\.\s+(.*)$/, '<li>$1</li>');
+      lines[i] = '<li>' + line.substring(line.indexOf(' ') + 1).trim() + '</li>';
       if (!inOl) {
         lines[i] = '<ol>' + lines[i];
         inOl = true;
