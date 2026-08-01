@@ -69,9 +69,9 @@ body {
 /* ── HEADER ─────────────────────────────────────────── */
 .header {
   position: sticky; top: 0; z-index: 100;
-  background: rgba(255,240,200,0.75);
+  background: rgba(255, 255, 255, 0.45);
   backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(0,0,0,0.1);
+  border-bottom: 1px solid rgba(0,0,0,0.06);
 }
 .header-inner {
   max-width: 1280px; margin: 0 auto;
@@ -85,7 +85,7 @@ body {
 .logo-title {
   display: block;
   font-size: 1.15rem; font-weight: 800;
-  background: linear-gradient(135deg, #3d6b00, #c97a00);
+  background: linear-gradient(135deg, #4f46e5, #0ea5e9);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
 }
 .logo-sub { display: block; font-size: 0.7rem; color: var(--muted); margin-top: -2px; }
