@@ -862,8 +862,8 @@ function injectRingGradient() {
   const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
   defs.innerHTML = `
     <linearGradient id="ring-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%"   stop-color="#5a8a00"/>
-      <stop offset="100%" stop-color="#c97a00"/>
+      <stop offset="0%"   stop-color="#C0BEFE"/>
+      <stop offset="100%" stop-color="#76DDFF"/>
     </linearGradient>
   `;
   svg.insertBefore(defs, svg.firstChild);
@@ -1228,7 +1228,7 @@ function spawnSparkles(targetElement, count = 25) {
   const centerX = rect.left + rect.width / 2 + scrollLeft;
   const centerY = rect.top + rect.height / 2 + scrollTop;
   
-  const colors = ['#FFCD7F', '#C5FF7F', '#ffffff', '#ffb703', '#5a8a00', '#c97a00'];
+  const colors = ['#C0BEFE', '#76DDFF', '#CFFFE2', '#FFD6EA', '#ffffff', '#1B1F3B'];
   
   for (let i = 0; i < count; i++) {
     const sparkle = document.createElement('div');
