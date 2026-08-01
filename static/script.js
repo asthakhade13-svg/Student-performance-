@@ -419,7 +419,7 @@ function showResult(data) {
         <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem; margin-bottom: 4px;">
           <span style="font-weight: 600; color: var(--text); width: 110px;">Week ${idx + 1} Attention</span>
           <div style="flex-grow: 1; margin: 0 12px; height: 8px; background: rgba(0,0,0,0.06); border-radius: 4px; overflow: hidden; position: relative;">
-            <div style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary), var(--secondary)); border-radius: 4px; transition: width 1.2s cubic-bezier(0.1, 0.8, 0.2, 1);" id="attn-bar-w${idx + 1}"></div>
+            <div style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary), var(--primary-g)); border-radius: 4px; transition: width 1.2s cubic-bezier(0.1, 0.8, 0.2, 1);" id="attn-bar-w${idx + 1}"></div>
           </div>
           <span style="font-weight: 700; color: var(--primary); width: 45px; text-align: right;">${pct}%</span>
         </div>
