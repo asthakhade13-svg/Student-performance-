@@ -562,18 +562,20 @@ function renderWaterfallPlot(data) {
     let x1 = 0, x2 = 0;
     
     if (step.isBase) {
+      color = '#6b7280';
       x1 = getX(step.cumulative) - 3;
       x2 = getX(step.cumulative) + 3;
     } else if (step.isFinal) {
+      color = '#0369a1';
       x1 = getX(step.cumulative) - 4;
       x2 = getX(step.cumulative) + 4;
     } else {
       if (step.impact > 0) {
-        color = '#3d6b00';
+        color = '#0f766e';
         x1 = getX(prevVal);
         x2 = getX(step.cumulative);
       } else {
-        color = '#a82000';
+        color = '#be123c';
         x1 = getX(step.cumulative);
         x2 = getX(prevVal);
       }
@@ -594,15 +596,15 @@ function renderWaterfallPlot(data) {
       <text x="10" y="${labelY}" font-size="10" font-weight="600" fill="var(--text)" text-anchor="start">${step.label}</text>
     `;
     
-    let fillColor = 'rgba(120, 120, 120, 0.7)';
+    let fillColor = '#9ca3af';
     if (step.isBase) {
-      fillColor = 'var(--muted)';
+      fillColor = '#9ca3af';
     } else if (step.isFinal) {
-      fillColor = 'var(--primary)';
+      fillColor = '#0284c7';
     } else if (step.impact > 0) {
-      fillColor = '#5a8a00';
+      fillColor = '#10b981';
     } else {
-      fillColor = '#c97a00';
+      fillColor = '#f43f5e';
     }
     
     svgContent += `
@@ -613,8 +615,8 @@ function renderWaterfallPlot(data) {
                        step.isFinal ? `${step.cumulative.toFixed(1)}` :
                        (step.impact > 0 ? `+${step.impact.toFixed(2)}` : `${step.impact.toFixed(2)}`);
                        
-    const textAnchor = (step.isBase || step.isFinal || step.impact > 0) ? 'start' : 'end';
-    const textX = (step.isBase || step.isFinal || step.impact > 0) ? rectX + barWidth + 6 : rectX - 6;
+     const textAnchor = (step.isBase || step.isFinal || step.impact > 0) ? 'start' : 'end';
+     const textX = (step.isBase || step.isFinal || step.impact > 0) ? rectX + barWidth + 6 : rectX - 6;
     
     let textStyle = `font-weight: 700; font-size: 10px; fill: ${color};`;
     svgContent += `
@@ -627,7 +629,33 @@ function renderWaterfallPlot(data) {
   });
   
   svgContent += `</svg>`;
-  container.innerHTML = svgContent;
+  
+  const legendHtml = `
+    <div class="waterfall-legend" style="margin-top: 15px; display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; font-size: 0.75rem; color: var(--text);">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span style="display: inline-block; width: 12px; height: 12px; background: #9ca3af; border-radius: 3px;"></span>
+        <span>Cohort Base Value</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span style="display: inline-block; width: 12px; height: 12px; background: #10b981; border-radius: 3px;"></span>
+        <span style="color: #0f766e; font-weight: 600;">Positive Impact (Improves score)</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span style="display: inline-block; width: 12px; height: 12px; background: #f43f5e; border-radius: 3px;"></span>
+        <span style="color: #be123c; font-weight: 600;">Negative Impact (Pulls down score)</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span style="display: inline-block; width: 12px; height: 12px; background: #0284c7; border-radius: 3px;"></span>
+        <span style="color: #0369a1; font-weight: 600;">Predicted Score</span>
+      </div>
+    </div>
+    
+    <div class="waterfall-explanation" style="margin-top: 15px; padding: 12px 15px; background: rgba(255,255,255,0.6); border-left: 4px solid var(--primary); border-radius: 8px; font-size: 0.78rem; line-height: 1.55; color: var(--text); border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+      <strong>How to read this chart:</strong> Starting from the average student base level score of <strong>${baseValue.toFixed(1)}</strong>, each of your personalized metrics pushes your predicted score up (in green) or pulls it down (in red). The final cumulative result is your projected score of <strong>${predScore.toFixed(1)}</strong>.
+    </div>
+  `;
+  
+  container.innerHTML = svgContent + legendHtml;
 }
 
 function animateCounter(id, from, to, duration) {
