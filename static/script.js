@@ -1283,32 +1283,12 @@ function initializeHolographicShineCards() {
     }
     
     card.addEventListener('mousemove', (e) => {
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      
       const rect = card.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
       
       const width = rect.width;
       const height = rect.height;
-      
-      // Relative coordinates from card center (-0.5 to 0.5)
-      const px = (x / width) - 0.5;
-      const py = (y / height) - 0.5;
-      
-      // Calculate smooth tilt values
-      const rotateY = px * 14; 
-      const rotateX = py * -14; 
-      
-      // Rotate the card smoothly using GSAP
-      gsap.to(card, {
-        rotateX: rotateX,
-        rotateY: rotateY,
-        transformPerspective: 1000,
-        ease: 'power2.out',
-        duration: 0.3,
-        overwrite: 'auto'
-      });
       
       // Calculate gradient positions
       const shineX = (x / width) * 100;
@@ -1321,16 +1301,6 @@ function initializeHolographicShineCards() {
       const highlightY = (1 - (y / height)) * 100;
       card.style.setProperty('--highlight-x', `${highlightX}%`);
       card.style.setProperty('--highlight-y', `${highlightY}%`);
-    });
-    
-    card.addEventListener('mouseleave', () => {
-      gsap.to(card, {
-        rotateX: 0,
-        rotateY: 0,
-        ease: 'power2.out',
-        duration: 0.5,
-        overwrite: 'auto'
-      });
     });
   });
 }

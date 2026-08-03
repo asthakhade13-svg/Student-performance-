@@ -185,8 +185,6 @@ body {
   transition: border-color 0.2s;
   position: relative;
   overflow: hidden;
-  transform-style: preserve-3d;
-  will-change: transform;
 }
 .card:hover { border-color: var(--border-h); }
 
