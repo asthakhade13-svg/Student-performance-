@@ -1305,6 +1305,64 @@ function initializeHolographicShineCards() {
   });
 }
 
+// ── TIPS MODAL POP-UP SYSTEM ─────────────────────────
+function setupTipsModal() {
+  const modal = document.getElementById('tips-modal');
+  const closeBtn = document.getElementById('tips-modal-close');
+  const modalIcon = document.getElementById('modal-tip-icon');
+  const modalTitle = document.getElementById('modal-tip-title');
+  const modalDesc = document.getElementById('modal-tip-desc');
+  
+  if (!modal || !closeBtn) return;
+  
+  // Click on any tip item to pop open the modal
+  const tipItems = document.querySelectorAll('.tip-item');
+  tipItems.forEach(item => {
+    item.addEventListener('click', () => {
+      const icon = item.querySelector('.tip-icon').textContent;
+      const title = item.querySelector('strong').textContent;
+      const desc = item.querySelector('p').textContent;
+      
+      // Get the color class (color-lavender, color-cyan, etc.) to style the modal icon circle matching the card
+      let colorClass = '';
+      if (item.classList.contains('color-lavender')) colorClass = 'color-lavender';
+      else if (item.classList.contains('color-cyan')) colorClass = 'color-cyan';
+      else if (item.classList.contains('color-mint')) colorClass = 'color-mint';
+      else if (item.classList.contains('color-pink')) colorClass = 'color-pink';
+      
+      // Reset color classes on modal icon
+      modalIcon.className = 'modal-tip-icon';
+      if (colorClass) modalIcon.classList.add(colorClass);
+      
+      modalIcon.textContent = icon;
+      modalTitle.textContent = title;
+      modalDesc.textContent = desc;
+      
+      // Open modal
+      modal.classList.add('active');
+    });
+  });
+  
+  // Close modal on close button click
+  closeBtn.addEventListener('click', () => {
+    modal.classList.remove('active');
+  });
+  
+  // Close modal on click outside content area
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.classList.remove('active');
+    }
+  });
+  
+  // Close modal on Escape key press
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal.classList.contains('active')) {
+      modal.classList.remove('active');
+    }
+  });
+}
+
 // ── INIT ───────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   bindSliders();
@@ -1312,6 +1370,7 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchActiveModelVersion();
   setupLiveValidation();
   initializeHolographicShineCards();
+  setupTipsModal();
   
   // Initial check for prefers-reduced-motion
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {

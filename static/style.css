@@ -1117,3 +1117,117 @@ html {
   border-color: rgba(239, 68, 68, 0.5) !important;
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
 }
+
+/* ── MODAL SYSTEM ────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(27, 31, 59, 0.4);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.modal-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+.modal-content {
+  background: var(--glass-b);
+  border: 1px solid var(--border-h);
+  border-radius: 24px;
+  padding: 32px;
+  width: 90%;
+  max-width: 480px;
+  box-shadow: 0 20px 50px rgba(27, 31, 59, 0.15);
+  transform: scale(0.9) translateY(20px);
+  transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+  position: relative;
+}
+.modal-overlay.active .modal-content {
+  transform: scale(1) translateY(0);
+}
+.modal-close-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(27, 31, 59, 0.05);
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 1.25rem;
+  font-weight: 400;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.2s;
+}
+.modal-close-btn:hover {
+  background: rgba(27, 31, 59, 0.1);
+  transform: scale(1.05);
+}
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 16px;
+}
+.modal-tip-icon {
+  font-size: 3rem;
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(27, 31, 59, 0.08);
+}
+
+/* Modal color states */
+.modal-tip-icon.color-lavender {
+  background: rgba(var(--primary-rgb), 0.18);
+  border: 1px solid rgba(var(--primary-rgb), 0.4);
+}
+.modal-tip-icon.color-cyan {
+  background: rgba(var(--accent-rgb), 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.45);
+}
+.modal-tip-icon.color-mint {
+  background: rgba(var(--mint-rgb), 0.25);
+  border: 1px solid rgba(var(--mint-rgb), 0.5);
+}
+.modal-tip-icon.color-pink {
+  background: rgba(var(--pink-rgb), 0.2);
+  border: 1px solid rgba(var(--pink-rgb), 0.45);
+}
+
+.modal-tip-title {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text);
+}
+.modal-tip-desc {
+  font-size: 0.92rem;
+  color: var(--muted);
+  line-height: 1.6;
+  background: rgba(255, 255, 255, 0.45);
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.03);
+}
+
+/* Hide descriptions inside the sidebar list items by default to make it look clean */
+.tip-item p {
+  display: none;
+}
+.tip-item {
+  cursor: pointer;
+}
