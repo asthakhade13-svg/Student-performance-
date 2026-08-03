@@ -503,9 +503,30 @@ body {
   padding: 14px; border-radius: 12px;
   background: rgba(255,255,255,0.5);
   border: 1px solid rgba(0,0,0,0.07);
+  transition: transform 0.2s, box-shadow 0.2s;
 }
-.tip-icon { font-size: 1.5rem; flex-shrink: 0; }
-.tip-item strong { display: block; font-size: 0.88rem; font-weight: 700; margin-bottom: 4px; }
+.tip-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(27, 31, 59, 0.05);
+}
+.tip-item.color-lavender {
+  background: rgba(var(--primary-rgb), 0.12);
+  border-color: rgba(var(--primary-rgb), 0.35);
+}
+.tip-item.color-cyan {
+  background: rgba(var(--accent-rgb), 0.15);
+  border-color: rgba(var(--accent-rgb), 0.4);
+}
+.tip-item.color-mint {
+  background: rgba(var(--mint-rgb), 0.2);
+  border-color: rgba(var(--mint-rgb), 0.45);
+}
+.tip-item.color-pink {
+  background: rgba(var(--pink-rgb), 0.15);
+  border-color: rgba(var(--pink-rgb), 0.4);
+}
+.tip-icon { font-size: 1.5rem; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.tip-item strong { display: block; font-size: 0.88rem; font-weight: 700; margin-bottom: 4px; color: var(--text); }
 .tip-item p { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
 
 /* ── TOAST ───────────────────────────────────────────── */
