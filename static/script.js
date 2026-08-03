@@ -1265,12 +1265,83 @@ function spawnSparkles(targetElement, count = 25) {
   }
 }
 
+// ── HOLOGRAPHIC SHINING CARDS ────────────────────────
+function initializeHolographicShineCards() {
+  const cards = document.querySelectorAll('.card');
+  
+  cards.forEach(card => {
+    // Dynamically insert shine and highlight layers if not already present
+    if (!card.querySelector('.card-shine')) {
+      const shine = document.createElement('div');
+      shine.className = 'card-shine';
+      card.appendChild(shine);
+    }
+    if (!card.querySelector('.card-highlight')) {
+      const highlight = document.createElement('div');
+      highlight.className = 'card-highlight';
+      card.appendChild(highlight);
+    }
+    
+    card.addEventListener('mousemove', (e) => {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      
+      const rect = card.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      const width = rect.width;
+      const height = rect.height;
+      
+      // Relative coordinates from card center (-0.5 to 0.5)
+      const px = (x / width) - 0.5;
+      const py = (y / height) - 0.5;
+      
+      // Calculate smooth tilt values
+      const rotateY = px * 14; 
+      const rotateX = py * -14; 
+      
+      // Rotate the card smoothly using GSAP
+      gsap.to(card, {
+        rotateX: rotateX,
+        rotateY: rotateY,
+        transformPerspective: 1000,
+        ease: 'power2.out',
+        duration: 0.3,
+        overwrite: 'auto'
+      });
+      
+      // Calculate gradient positions
+      const shineX = (x / width) * 100;
+      const shineY = (y / height) * 100;
+      card.style.setProperty('--shine-x', `${shineX}%`);
+      card.style.setProperty('--shine-y', `${shineY}%`);
+      
+      // Specular highlight shifts in the opposite direction
+      const highlightX = (1 - (x / width)) * 100;
+      const highlightY = (1 - (y / height)) * 100;
+      card.style.setProperty('--highlight-x', `${highlightX}%`);
+      card.style.setProperty('--highlight-y', `${highlightY}%`);
+    });
+    
+    card.addEventListener('mouseleave', () => {
+      gsap.to(card, {
+        rotateX: 0,
+        rotateY: 0,
+        ease: 'power2.out',
+        duration: 0.5,
+        overwrite: 'auto'
+      });
+    });
+  });
+}
+
 // ── INIT ───────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   bindSliders();
   injectRingGradient();
   fetchActiveModelVersion();
   setupLiveValidation();
+  initializeHolographicShineCards();
   
   // Initial check for prefers-reduced-motion
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {

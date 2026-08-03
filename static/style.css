@@ -183,8 +183,39 @@ body {
   backdrop-filter: blur(12px);
   padding: 28px;
   transition: border-color 0.2s;
+  position: relative;
+  overflow: hidden;
+  transform-style: preserve-3d;
+  will-change: transform;
 }
 .card:hover { border-color: var(--border-h); }
+
+.card-shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  background: radial-gradient(circle at var(--shine-x, 50%) var(--shine-y, 50%), rgba(255,255,255,0.18) 0%, transparent 60%);
+  mix-blend-mode: overlay;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.card-highlight {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  background: radial-gradient(circle at var(--highlight-x, 50%) var(--highlight-y, 50%), rgba(255,214,234,0.2) 0%, rgba(192,190,254,0.25) 30%, transparent 70%);
+  mix-blend-mode: color-dodge;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.card:hover .card-shine,
+.card:hover .card-highlight {
+  opacity: 1;
+}
 .card-header h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; }
 .card-header p  { font-size: 0.8rem; color: var(--muted); }
 .card-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 6px; }
