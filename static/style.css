@@ -4,7 +4,7 @@
 :root {
   --bg:         #FAFBFF;                 /* Warm White */
   --surface:    #FAFBFF;
-  --glass:      rgba(207, 255, 226, 0.25); /* Soft Mint translucent overlay */
+  --glass:      rgba(255, 255, 255, 0.45); /* Frosty translucent glass */
   --glass-b:    rgba(255, 255, 255, 0.95);
   --border:     rgba(27, 31, 59, 0.08);   /* Subtle deep navy border */
   --border-h:   rgba(27, 31, 59, 0.18);
@@ -178,15 +178,22 @@ body {
 /* ── CARDS ───────────────────────────────────────────── */
 .card {
   background: var(--glass);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.45);
   border-radius: var(--card-r);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   padding: 28px;
-  transition: border-color 0.2s;
+  transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s;
   position: relative;
   overflow: hidden;
+  box-shadow: 0 8px 32px 0 rgba(27, 31, 59, 0.05),
+              inset 0 0 0 1px rgba(255, 255, 255, 0.2);
 }
-.card:hover { border-color: var(--border-h); }
+.card:hover {
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 12px 40px 0 rgba(27, 31, 59, 0.08),
+              inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
 
 .card-shine {
   position: absolute;
@@ -1137,13 +1144,16 @@ html {
   pointer-events: auto;
 }
 .modal-content {
-  background: var(--glass-b);
-  border: 1px solid var(--border-h);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: 24px;
   padding: 32px;
   width: 90%;
   max-width: 480px;
-  box-shadow: 0 20px 50px rgba(27, 31, 59, 0.15);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 20px 50px rgba(27, 31, 59, 0.15),
+              inset 0 0 0 1px rgba(255, 255, 255, 0.25);
   transform: scale(0.9) translateY(20px);
   transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
   position: relative;
