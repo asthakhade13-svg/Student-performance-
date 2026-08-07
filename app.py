@@ -4,6 +4,8 @@ import numpy as np
 import joblib
 import os
 import json
+import shutil
+import time
 from datetime import datetime
 import google.generativeai as genai
 import optuna
@@ -847,6 +849,152 @@ def add_student():
         return jsonify({"success": False, "error": str(e)}), 400
 
 
+def ingest_dataframe(incoming_df):
+    required_cols = [
+        "attendance", "previous_marks",
+        "study_hours_w1", "sleep_hours_w1", "lms_logins_w1", "assignments_completed_w1", "mock_exams_w1",
+        "study_hours_w2", "sleep_hours_w2", "lms_logins_w2", "assignments_completed_w2", "mock_exams_w2",
+        "study_hours_w3", "sleep_hours_w3", "lms_logins_w3", "assignments_completed_w3", "mock_exams_w3",
+        "study_hours_w4", "sleep_hours_w4", "lms_logins_w4", "assignments_completed_w4", "mock_exams_w4",
+        "final_score"
+    ]
+    
+    # Verify columns exist
+    missing_cols = [col for col in required_cols if col not in incoming_df.columns]
+    if missing_cols:
+        print(f"[Adaptive Ingestion] Missing columns in dataframe: {missing_cols}")
+        return False
+        
+    try:
+        # Cast datatype
+        for col in required_cols:
+            incoming_df[col] = pd.to_numeric(incoming_df[col], errors='coerce')
+        incoming_df = incoming_df.dropna(subset=required_cols)
+        
+        if len(incoming_df) == 0:
+            print("[Adaptive Ingestion] Empty valid student records after numeric coercion.")
+            return False
+            
+        # Optional metadata fields like notes and school_id
+        if "notes" not in incoming_df.columns:
+            incoming_df["notes"] = "Autonomously Ingested Profile"
+        if "school_id" not in incoming_df.columns:
+            incoming_df["school_id"] = "alpha"
+            
+        conn = sqlite3.connect(DB_PATH)
+        for _, row in incoming_df.iterrows():
+            school_id = str(row.get("school_id", "alpha")).strip().lower()
+            if school_id not in ["alpha", "beta", "gamma"]:
+                school_id = "alpha"
+                
+            student_row = {col: float(row[col]) for col in required_cols}
+            student_row["notes"] = str(row.get("notes", "Autonomously Ingested Profile")).strip()
+            
+            # Insert into database
+            row_df = pd.DataFrame([student_row])
+            row_df.to_sql(f"student_data_{school_id}", conn, if_exists="append", index=False)
+            row_df.to_sql("student_data", conn, if_exists="append", index=False)
+            
+            # Also append to student_data.csv to synchronize!
+            try:
+                csv_df = pd.read_csv(CSV_PATH)
+                csv_df = pd.concat([csv_df, row_df], ignore_index=True)
+                csv_df.to_csv(CSV_PATH, index=False)
+            except Exception as csv_err:
+                print(f"[Adaptive Ingestion] CSV backup sync failed: {str(csv_err)}")
+            
+        conn.commit()
+        conn.close()
+        
+        # Trigger model retraining
+        trigger_background_training()
+        return True
+    except Exception as e:
+        print(f"[Adaptive Ingestion] Database write failure: {str(e)}")
+        return False
+
+def start_adaptive_file_watcher():
+    incoming_dir = os.path.join(BASE_DIR, "incoming_data")
+    archive_dir = os.path.join(BASE_DIR, "ingested_archive")
+    
+    if not os.path.exists(incoming_dir):
+        os.makedirs(incoming_dir)
+    if not os.path.exists(archive_dir):
+        os.makedirs(archive_dir)
+        
+    def watch_loop():
+        print(f"[Adaptive Ingestion] Directory watcher listening on '{incoming_dir}'...")
+        while True:
+            try:
+                files = [f for f in os.listdir(incoming_dir) if f.endswith('.csv') or f.endswith('.json')]
+                for file in files:
+                    filepath = os.path.join(incoming_dir, file)
+                    print(f"[Adaptive Ingestion] New file detected: {file}")
+                    
+                    success = False
+                    # Parse CSV or JSON
+                    if file.endswith('.csv'):
+                        try:
+                            incoming_df = pd.read_csv(filepath)
+                            success = ingest_dataframe(incoming_df)
+                        except Exception as parse_err:
+                            print(f"[Adaptive Ingestion] CSV parse failed for {file}: {str(parse_err)}")
+                    elif file.endswith('.json'):
+                        try:
+                            with open(filepath, 'r') as json_f:
+                                json_data = json.load(json_f)
+                            if isinstance(json_data, dict):
+                                json_data = [json_data]
+                            incoming_df = pd.DataFrame(json_data)
+                            success = ingest_dataframe(incoming_df)
+                        except Exception as parse_err:
+                            print(f"[Adaptive Ingestion] JSON parse failed for {file}: {str(parse_err)}")
+                            
+                    # Archive the parsed file
+                    if success:
+                        # Move to archive directory (handling name collisions)
+                        base_name, ext = os.path.splitext(file)
+                        dest_path = os.path.join(archive_dir, f"{base_name}_{int(time.time())}{ext}")
+                        shutil.move(filepath, dest_path)
+                        print(f"[Adaptive Ingestion] Successfully ingested and archived to {dest_path}")
+                    else:
+                        # Move to failed file name format to prevent endless loops
+                        failed_path = os.path.join(incoming_dir, f"failed_{int(time.time())}_{file}")
+                        if os.path.exists(filepath):
+                            os.rename(filepath, failed_path)
+                            print(f"[Adaptive Ingestion] Ingestion failed. Renamed to {failed_path}")
+            except Exception as loop_err:
+                print(f"[Adaptive Ingestion] Loop error: {str(loop_err)}")
+                
+            time.sleep(5)
+            
+    t = threading.Thread(target=watch_loop, daemon=True)
+    t.start()
+
+@app.route('/api/adapt/ingest-webhook', methods=['POST'])
+def adapt_ingest_webhook():
+    try:
+        payload = request.get_json()
+        if not payload:
+            return jsonify({"success": False, "error": "Empty payload"}), 400
+            
+        if isinstance(payload, dict):
+            payload = [payload]
+            
+        incoming_df = pd.DataFrame(payload)
+        success = ingest_dataframe(incoming_df)
+        
+        if success:
+            return jsonify({
+                "success": True, 
+                "message": "Student records successfully ingested autonomously. Incremental model retraining triggered."
+            })
+        else:
+            return jsonify({"success": False, "error": "Validation error or empty dataset after type casting."}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
 @app.route('/api/delete-student/<int:index>', methods=['DELETE'])
 def delete_student(index):
     try:
@@ -1443,6 +1591,7 @@ if __name__ == '__main__':
     load_or_create_data()
     initialize_dkt_agent()
     initialize_rl_agent()
+    start_adaptive_file_watcher()
     app.run(debug=False, port=5000)
 
 
