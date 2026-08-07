@@ -2,8 +2,8 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:         #FAFBFF;                 /* Warm White */
-  --surface:    #FAFBFF;
+  --bg:         #E2E6FF;                 /* Soft Pastel Lavender */
+  --surface:    #D8F2FF;                 /* Soft Sky Blue */
   --glass:      rgba(255, 255, 255, 0.45); /* Frosty translucent glass */
   --glass-b:    rgba(255, 255, 255, 0.95);
   --border:     rgba(27, 31, 59, 0.08);   /* Subtle deep navy border */
@@ -36,7 +36,7 @@
 html { scroll-behavior: smooth; }
 body {
   font-family: 'Inter', sans-serif;
-  background: var(--bg);
+  background: linear-gradient(135deg, var(--bg) 0%, var(--surface) 100%);
   background-attachment: fixed;
   color: var(--text);
   min-height: 100vh;
