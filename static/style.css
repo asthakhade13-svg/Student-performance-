@@ -195,12 +195,34 @@ body {
               inset 0 0 0 1px rgba(255, 255, 255, 0.5);
 }
 
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -150%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: skewX(-25deg);
+  transition: left 0.75s ease-in-out;
+  z-index: 4;
+  pointer-events: none;
+}
+.card:hover::before {
+  left: 150%;
+}
+
 .card-shine {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 5;
-  background: radial-gradient(circle at var(--shine-x, 50%) var(--shine-y, 50%), rgba(255,255,255,0.18) 0%, transparent 60%);
+  background: radial-gradient(circle at var(--shine-x, 50%) var(--shine-y, 50%), rgba(255,255,255,0.32) 0%, transparent 60%);
   mix-blend-mode: overlay;
   opacity: 0;
   transition: opacity 0.3s ease;
@@ -211,7 +233,7 @@ body {
   inset: 0;
   pointer-events: none;
   z-index: 6;
-  background: radial-gradient(circle at var(--highlight-x, 50%) var(--highlight-y, 50%), rgba(255,214,234,0.2) 0%, rgba(192,190,254,0.25) 30%, transparent 70%);
+  background: radial-gradient(circle at var(--highlight-x, 50%) var(--highlight-y, 50%), rgba(255,214,234,0.4) 0%, rgba(118,221,255,0.45) 35%, transparent 70%);
   mix-blend-mode: color-dodge;
   opacity: 0;
   transition: opacity 0.3s ease;
