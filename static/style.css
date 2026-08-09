@@ -195,6 +195,11 @@ body {
               inset 0 0 0 1px rgba(255, 255, 255, 0.5);
 }
 
+.card > *:not(.card-shine):not(.card-highlight) {
+  position: relative;
+  z-index: 10;
+}
+
 .card::before {
   content: '';
   position: absolute;
@@ -210,7 +215,7 @@ body {
   );
   transform: skewX(-25deg);
   transition: left 0.75s ease-in-out;
-  z-index: 4;
+  z-index: 3;
   pointer-events: none;
 }
 .card:hover::before {
@@ -221,7 +226,7 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 5;
+  z-index: 1;
   background: radial-gradient(circle at var(--shine-x, 50%) var(--shine-y, 50%), rgba(255,255,255,0.32) 0%, transparent 60%);
   mix-blend-mode: overlay;
   opacity: 0;
@@ -232,7 +237,7 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 6;
+  z-index: 2;
   background: radial-gradient(circle at var(--highlight-x, 50%) var(--highlight-y, 50%), rgba(255,214,234,0.4) 0%, rgba(118,221,255,0.45) 35%, transparent 70%);
   mix-blend-mode: color-dodge;
   opacity: 0;
