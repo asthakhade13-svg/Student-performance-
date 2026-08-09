@@ -1313,7 +1313,7 @@ function setupTipsModal() {
   const modalTitle = document.getElementById('modal-tip-title');
   const modalDesc = document.getElementById('modal-tip-desc');
   
-  if (!modal || !closeBtn) return;
+  if (!modal) return;
   
   // Click on any tip item to pop open the modal
   const tipItems = document.querySelectorAll('.tip-item');
@@ -1343,10 +1343,12 @@ function setupTipsModal() {
     });
   });
   
-  // Close modal on close button click
-  closeBtn.addEventListener('click', () => {
-    modal.classList.remove('active');
-  });
+  // Close modal on close button click if present
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      modal.classList.remove('active');
+    });
+  }
   
   // Close modal on click outside content area
   modal.addEventListener('click', (e) => {
