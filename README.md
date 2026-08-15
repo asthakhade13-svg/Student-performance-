@@ -21,18 +21,4 @@ An adaptive, end-to-end Machine Learning platform designed to forecast student f
 *   `POST /api/generate-advice`: Returns RAG counseling action plans and runs RL compliance simulations.
 *   `POST /api/adapt/ingest-webhook`: Autonomously adds external student records and queues retraining.
 
----
 
-## 💻 Quick Start
-
-### 1. Install Dependencies
-```bash
-pip install flask numpy pandas torch scikit-learn optuna google-genai sqlite3
-```
-
-### 2. Boot the Server
-```bash
-python app.py
-```
-*   **Access Dashboard**: Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your browser.
-*   **Adaptive Folder Watcher**: Drop student CSVs in `incoming_data/` to automatically update the models.
