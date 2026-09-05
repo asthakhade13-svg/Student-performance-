@@ -1587,11 +1587,20 @@ def log_feedback():
         return jsonify({"success": False, "error": str(e)}), 400
 
 
+def initialize_app():
+    try:
+        load_or_create_data()
+        initialize_dkt_agent()
+        initialize_rl_agent()
+        start_adaptive_file_watcher()
+    except Exception as e:
+        print(f"[Startup Warning] Initialization error: {e}")
+
+# Run initialization when module is imported (supports Gunicorn & direct python execution)
+initialize_app()
+
 if __name__ == '__main__':
-    load_or_create_data()
-    initialize_dkt_agent()
-    initialize_rl_agent()
-    start_adaptive_file_watcher()
-    app.run(debug=False, port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
 
 
