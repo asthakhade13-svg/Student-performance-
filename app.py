@@ -624,8 +624,7 @@ def predict():
         idx_cand, off_cand = prepare_text_tensors([notes_text])
         _, uncertainty, variance = predict_with_uncertainty(model, seq_all_scaled[[cand_idx]], idx_cand, off_cand, scaler_y, sentiment_shift, num_samples=50)
             
-        # Calculate SHAP explanations
-        import shap
+        # Calculate feature attribution explanations (SHAP with resilient fast fallback)
         df = load_or_create_data()
         X_all = df[FEATURE_COLS]
         
@@ -663,20 +662,33 @@ def predict():
                 
             return np.concatenate(all_preds)
             
-        # Use median background profile and limit perturbation samples to make SHAP prediction instant (< 200ms!)
-        background_summary = pd.DataFrame([X_all.median()], columns=FEATURE_COLS)
-        explainer = shap.KernelExplainer(shap_predict_fn, background_summary)
-        shap_vals = explainer.shap_values(student_df, nsamples=80, l1_reg=False)
-        
-        if isinstance(shap_vals, list):
-            shap_vals = shap_vals[0]
-            
-        explanations = []
-        for col, val in zip(FEATURE_COLS, shap_vals[0]):
-            explanations.append({
-                "feature": col,
-                "impact": round(float(val), 2)
-            })
+        try:
+            import shap
+            background_summary = pd.DataFrame([X_all.median()], columns=FEATURE_COLS)
+            explainer = shap.KernelExplainer(shap_predict_fn, background_summary)
+            shap_vals = explainer.shap_values(student_df, nsamples=80, l1_reg=False)
+            if isinstance(shap_vals, list):
+                shap_vals = shap_vals[0]
+            explanations = []
+            for col, val in zip(FEATURE_COLS, shap_vals[0]):
+                explanations.append({
+                    "feature": col,
+                    "impact": round(float(val), 2)
+                })
+            base_value = round(float(explainer.expected_value), 2)
+        except Exception:
+            median_vals = X_all.median()
+            base_pred = float(shap_predict_fn(median_vals.values.reshape(1, -1))[0])
+            base_value = round(base_pred, 2)
+            explanations = []
+            for col in FEATURE_COLS:
+                perturbed = median_vals.copy()
+                perturbed[col] = student_df[col].values[0]
+                col_pred = float(shap_predict_fn(perturbed.values.reshape(1, -1))[0])
+                explanations.append({
+                    "feature": col,
+                    "impact": round(col_pred - base_pred, 2)
+                })
 
         # Determine grade
         if predicted_score >= 90:
@@ -691,8 +703,6 @@ def predict():
             grade, grade_class = "D", "grade-d"
         else:
             grade, grade_class = "F", "grade-f"
-
-        base_value = round(float(explainer.expected_value), 2)
 
         from models.personalization_manager import load_personalized_heads
         heads = load_personalized_heads()
@@ -1037,12 +1047,7 @@ def feature_importance():
         df = load_or_create_data()
         X_all = df[FEATURE_COLS]
         
-        # 1. Scale-Optimized SHAP background (1 sample median prototype) and subset evaluation (at most 10)
-        import shap
-        median_x = X_all.median(axis=0).values.reshape(1, -1)
-        background = pd.DataFrame(median_x, columns=FEATURE_COLS)
-        sample_subset = X_all.sample(n=min(10, len(X_all)), random_state=42)
-        
+        # 1. Scale-Optimized feature importance (SHAP with fast fallback)
         def shap_predict_fn(X_np):
             df_temp = pd.DataFrame(X_np, columns=FEATURE_COLS)
             seq, _, _ = get_seq_and_static_data(df_temp)
@@ -1054,13 +1059,26 @@ def feature_importance():
                 preds_unscaled = scaler_y.inverse_transform(preds_tensor.numpy())
             return preds_unscaled.flatten()
             
-        explainer = shap.KernelExplainer(shap_predict_fn, background)
-        shap_vals = explainer.shap_values(sample_subset, l1_reg=False)
-        
-        if isinstance(shap_vals, list):
-            shap_vals = shap_vals[0]
-            
-        importance = np.mean(np.abs(shap_vals), axis=0).tolist()
+        try:
+            import shap
+            median_x = X_all.median(axis=0).values.reshape(1, -1)
+            background = pd.DataFrame(median_x, columns=FEATURE_COLS)
+            sample_subset = X_all.sample(n=min(10, len(X_all)), random_state=42)
+            explainer = shap.KernelExplainer(shap_predict_fn, background)
+            shap_vals = explainer.shap_values(sample_subset, l1_reg=False)
+            if isinstance(shap_vals, list):
+                shap_vals = shap_vals[0]
+            importance = np.mean(np.abs(shap_vals), axis=0).tolist()
+        except Exception:
+            median_x = X_all.median(axis=0).values.reshape(1, -1)
+            base_pred = float(shap_predict_fn(median_x)[0])
+            importance = []
+            for col_idx, col in enumerate(FEATURE_COLS):
+                perturbed = median_x.copy()
+                std_val = float(X_all[col].std()) if float(X_all[col].std()) > 0 else 1.0
+                perturbed[0, col_idx] += std_val
+                imp = abs(float(shap_predict_fn(perturbed)[0]) - base_pred)
+                importance.append(round(imp, 3))
         
         # 2. Compute Class Cohort Metrics
         total_students = len(df)
