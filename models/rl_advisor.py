@@ -199,6 +199,19 @@ class MARLAgent:
         loss_stud.backward()
         self.student_optimizer.step()
 
+    def save(self, filepath):
+        torch.save({
+            'adv_model_state_dict': self.adv_model.state_dict(),
+            'student_model_state_dict': self.student_model.state_dict()
+        }, filepath)
+
+    def load(self, filepath):
+        checkpoint = torch.load(filepath, map_location=torch.device('cpu'))
+        self.adv_model.load_state_dict(checkpoint['adv_model_state_dict'])
+        self.student_model.load_state_dict(checkpoint['student_model_state_dict'])
+        self.adv_model.eval()
+        self.student_model.eval()
+
 
 def train_rl_advisor(df_all, predict_fn, epochs=150):
     """

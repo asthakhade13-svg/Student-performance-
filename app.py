@@ -418,7 +418,15 @@ global_rl_agent = None
 def initialize_rl_agent():
     global global_rl_agent
     try:
-        from models.rl_advisor import train_rl_advisor
+        from models.rl_advisor import MARLAgent, train_rl_advisor
+        checkpoint_path = os.path.join(MODELS_DIR, 'marl_advisor.pth')
+        if os.path.exists(checkpoint_path):
+            agent = MARLAgent()
+            agent.load(checkpoint_path)
+            global_rl_agent = agent
+            print("[MARL Dynamics Advisor] Loaded pre-trained MARL Agent checkpoint.")
+            return
+
         df_all = load_or_create_data()
         
         # Load model and stats once to optimize prediction speed inside the RL training loop
@@ -437,9 +445,13 @@ def initialize_rl_agent():
                 score = scaler_y.inverse_transform(pred.numpy())[0][0]
             return float(score)
 
-        global_rl_agent = train_rl_advisor(df_all, predict_state, epochs=120)
+        global_rl_agent = train_rl_advisor(df_all, predict_state, epochs=60)
+        try:
+            global_rl_agent.save(checkpoint_path)
+        except Exception as save_err:
+            print(f"[RL Initialization] Warning saving checkpoint: {save_err}")
     except Exception as e:
-        print(f"[RL Initialization] Failed to train DQN agent: {str(e)}")
+        print(f"[RL Initialization] Failed to train MARL agent: {str(e)}")
 
 
 # ── Routes ──────────────────────────────────────────────────────────────
@@ -1616,15 +1628,21 @@ def log_feedback():
 
 
 def initialize_app():
-    try:
-        load_or_create_data()
-        initialize_dkt_agent()
-        initialize_rl_agent()
-        start_adaptive_file_watcher()
-    except Exception as e:
-        print(f"[Startup Warning] Initialization error: {e}")
+    def _background_init():
+        try:
+            load_or_create_data()
+            initialize_dkt_agent()
+            initialize_rl_agent()
+            start_adaptive_file_watcher()
+            print("[Startup] Background agents, database, and models initialized successfully!")
+        except Exception as e:
+            print(f"[Startup Warning] Background initialization error: {e}")
 
-# Run initialization when module is imported (supports Gunicorn & direct python execution)
+    # Launch in a background thread so Gunicorn/Flask binds to PORT instantly (<1s) for Render health checks
+    init_thread = threading.Thread(target=_background_init, daemon=True)
+    init_thread.start()
+
+# Run non-blocking initialization on import
 initialize_app()
 
 if __name__ == '__main__':
