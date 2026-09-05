@@ -24,16 +24,26 @@ app = Flask(__name__, static_folder='static')
 # Initialize RAG Vector Store
 vector_store = LocalVectorStore()
 
-# Configure Gemini API
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
 REGISTRY_PATH = os.path.join(MODELS_DIR, 'registry.json')
 CSV_PATH = os.path.join(BASE_DIR, 'student_data.csv')
 DB_PATH = os.path.join(MODELS_DIR, 'student_records.db')
+
+# Load .env locally if present
+env_file = os.path.join(BASE_DIR, '.env')
+if os.path.exists(env_file):
+    with open(env_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                k, v = line.split('=', 1)
+                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+# Configure Gemini API
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 # Concurrency thread control locks for active retraining
 training_lock = threading.Lock()
