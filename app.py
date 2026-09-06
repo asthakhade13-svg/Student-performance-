@@ -461,6 +461,15 @@ def index():
     return send_from_directory('.', 'index.html')
 
 
+@app.route('/health')
+def health_check():
+    return jsonify({
+        "status": "healthy",
+        "service": "student-performance-predictor",
+        "timestamp": time.time()
+    }), 200
+
+
 @app.route('/static/<path:filename>')
 def static_files(filename):
     return send_from_directory('static', filename)
