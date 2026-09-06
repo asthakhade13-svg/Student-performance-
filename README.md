@@ -1,5 +1,10 @@
 # 🎓 Student Performance Predictor (AI-MLOps Dashboard)
 
+[![Live Demo](https://img.shields.io/badge/Render-Live_Demo-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://student-performance-gfqd.onrender.com)
+[![Status](https://img.shields.io/badge/Status-Online-success?style=for-the-badge)](https://student-performance-gfqd.onrender.com)
+
+🔗 **Live Deployment URL**: [https://student-performance-gfqd.onrender.com](https://student-performance-gfqd.onrender.com)
+
 An adaptive, end-to-end Machine Learning platform designed to forecast student final marks, analyze academic risk levels, and generate customized counseling recommendations.
 
 ---
