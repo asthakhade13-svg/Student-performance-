@@ -1657,10 +1657,9 @@ def initialize_app():
     init_thread = threading.Thread(target=_background_init, daemon=True)
     init_thread.start()
 
-# Run non-blocking initialization on import
-initialize_app()
 
 if __name__ == '__main__':
+    initialize_app()
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
 
