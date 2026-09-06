@@ -1,8 +1,13 @@
+import os
+# Limit thread pools to minimize RAM footprint on Render Free Tier (512MB limit)
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
 from flask import Flask, request, jsonify, send_from_directory
 import pandas as pd
 import numpy as np
 import joblib
-import os
 import json
 import shutil
 import time
@@ -12,6 +17,7 @@ import optuna
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import mean_absolute_error, r2_score
 import torch
+torch.set_num_threads(1)
 import torch.nn as nn
 import sqlite3
 import threading
@@ -458,7 +464,7 @@ def initialize_rl_agent():
 
 @app.route('/')
 def index():
-    return send_from_directory('.', 'index.html')
+    return send_from_directory(BASE_DIR, 'index.html')
 
 
 @app.route('/health')
@@ -472,7 +478,7 @@ def health_check():
 
 @app.route('/static/<path:filename>')
 def static_files(filename):
-    return send_from_directory('static', filename)
+    return send_from_directory(os.path.join(BASE_DIR, 'static'), filename)
 
 
 def predict_with_uncertainty(model, seq_scaled, idx_tensor, off_tensor, scaler_y, sentiment_shift, num_samples=50):
