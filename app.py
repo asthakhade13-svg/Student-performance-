@@ -835,61 +835,66 @@ def active_learning_queue():
         if len(df) == 0:
             return jsonify({"success": True, "queue": []})
             
-        queue_records = []
         from models.lstm_model import get_seq_and_static_data, prepare_text_tensors
-        from models.personalization_manager import apply_personalization
-        import copy
-        from models.lstm_model import StudentTransformerLSTM
         
-        for idx, row in df.iterrows():
-            student_id = row.get("student_id", f"student_{idx}")
-            if not student_id or not isinstance(student_id, str):
-                student_id = f"student_{idx}"
-                
-            student_df = pd.DataFrame([row])
-            seq, _, _ = get_seq_and_static_data(student_df)
-            N, T, F = seq.shape
-            seq_flat = seq.reshape(-1, F)
-            seq_scaled = scaler_x.transform(seq_flat).reshape(N, T, F)
-            
-            notes_text = row.get("notes", "")
-            if not isinstance(notes_text, str):
-                notes_text = ""
-                
-            idx_tensor, off_tensor = prepare_text_tensors([notes_text])
-            
-            POSITIVE_KEYWORDS = ["excellent", "outstanding", "brilliant", "progress", "motivated", "active", "consistent", "good", "strong", "great", "stable", "high"]
-            NEGATIVE_KEYWORDS = ["struggle", "dropout", "disengaged", "burnout", "alert", "missed", "low", "poor", "warning", "critical", "deprivation"]
-            
-            def get_lexicon_sentiment(text):
-                if not text:
-                    return 0.0
-                tokens = text.lower().replace('.', ' ').replace(',', ' ').split()
-                score = 0.0
-                for w in tokens:
-                    if any(kw in w for kw in POSITIVE_KEYWORDS):
-                        score += 1.0
-                    elif any(kw in w for kw in NEGATIVE_KEYWORDS):
-                        score -= 1.0
-                return max(-3.0, min(3.0, score))
-                
-            sentiment_shift = get_lexicon_sentiment(notes_text) * 1.5
-            
-            local_model = StudentTransformerLSTM()
-            local_model.load_state_dict(model.state_dict())
-            apply_personalization(local_model, student_id)
-            
-            mean_score, std_dev, variance = predict_with_uncertainty(local_model, seq_scaled, idx_tensor, off_tensor, scaler_y, sentiment_shift, num_samples=50)
-            
+        seq_all, _, _ = get_seq_and_static_data(df)
+        N, T, F = seq_all.shape
+        seq_flat = seq_all.reshape(-1, F)
+        seq_scaled = scaler_x.transform(seq_flat).reshape(N, T, F)
+        
+        notes_list = [str(row.get("notes", "")) if row.get("notes") is not None else "" for _, row in df.iterrows()]
+        idx_all, off_all = prepare_text_tensors(notes_list)
+        
+        POSITIVE_KEYWORDS = ["excellent", "outstanding", "brilliant", "progress", "motivated", "active", "consistent", "good", "strong", "great", "stable", "high"]
+        NEGATIVE_KEYWORDS = ["struggle", "dropout", "disengaged", "burnout", "alert", "missed", "low", "poor", "warning", "critical", "deprivation"]
+        
+        shifts = []
+        for text in notes_list:
+            if not text:
+                shifts.append(0.0)
+                continue
+            tokens = text.lower().replace('.', ' ').replace(',', ' ').split()
+            score = 0.0
+            for w in tokens:
+                if any(kw in w for kw in POSITIVE_KEYWORDS):
+                    score += 1.0
+                elif any(kw in w for kw in NEGATIVE_KEYWORDS):
+                    score -= 1.0
+            shifts.append(max(-3.0, min(3.0, score)) * 1.5)
+        shifts = np.array(shifts)
+        
+        # Batched MC Dropout: Run 15 forward passes across all N students concurrently
+        model.train()
+        all_preds = []
+        tensor_seq = torch.tensor(seq_scaled, dtype=torch.float32)
+        with torch.no_grad():
+            for _ in range(15):
+                pred_reg, _, _ = model(tensor_seq, idx_all, off_all)
+                unscaled = scaler_y.inverse_transform(pred_reg.numpy()).flatten()
+                clipped = np.clip(unscaled + shifts, 0.0, 100.0)
+                all_preds.append(clipped)
+        model.eval()
+        
+        all_preds = np.array(all_preds) # shape: (15, N)
+        means = np.mean(all_preds, axis=0)
+        stds = np.std(all_preds, axis=0) * 6.0
+        variances = np.var(all_preds, axis=0) * 36.0
+        
+        queue_records = []
+        for i, (_, row) in enumerate(df.iterrows()):
+            s_id = row.get("student_id", f"student_{i}")
+            if not s_id or not isinstance(s_id, str):
+                s_id = f"student_{i}"
+            std_val = max(0.1, round(float(stds[i]), 2))
             queue_records.append({
-                "student_id": student_id,
-                "predicted_score": mean_score,
-                "uncertainty": std_dev,
-                "variance": variance,
+                "student_id": s_id,
+                "predicted_score": round(float(means[i]), 2),
+                "uncertainty": std_val,
+                "variance": round(float(variances[i]), 4),
                 "attendance": float(row.get("attendance", 80.0)),
                 "previous_marks": float(row.get("previous_marks", 70.0)),
-                "notes": notes_text,
-                "priority": "High" if std_dev >= 2.0 else ("Medium" if std_dev >= 1.0 else "Low")
+                "notes": notes_list[i],
+                "priority": "High" if std_val >= 2.0 else ("Medium" if std_val >= 1.0 else "Low")
             })
             
         queue_records = sorted(queue_records, key=lambda x: x["uncertainty"], reverse=True)
