@@ -25,7 +25,7 @@ FEATURE_BOUNDS = {
     "mock_exams": (0.0, 100.0)
 }
 
-def compute_counterfactual_recourse(model, scaler_x, scaler_y, current_features, target_score=85.0, steps=100, lr=0.05):
+def compute_counterfactual_recourse(model, scaler_x, scaler_y, current_features, target_score=85.0, steps=25, lr=0.08):
     """
     Calculates the minimal actionable modification (Counterfactual Recourse) required
     to achieve a target exam score y_target.
