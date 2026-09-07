@@ -1,4 +1,5 @@
 import os
+import gc
 import torch
 import torch.nn as nn
 import numpy as np
@@ -476,6 +477,9 @@ def train_pytorch_model(df, model_path):
                 mae_list.append(mean_absolute_error(yr_val_unscaled, pred_reg_val_unscaled))
                 all_val_preds[val_idx] = pred_reg_val_unscaled.flatten()
                 all_val_trues[val_idx] = yr_val_unscaled.flatten()
+            
+            del model, optimizer
+            gc.collect()
                 
         mae_mean = float(np.mean(mae_list))
         mae_std = float(np.std(mae_list))
@@ -535,5 +539,8 @@ def train_pytorch_model(df, model_path):
         "fairness_gender": fairness_gender
     }
     joblib.dump(payload, model_path)
+    
+    del final_model, optimizer, payload
+    gc.collect()
     
     return mae_mean, mae_std, r2_mean, fairness_district, fairness_gender

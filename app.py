@@ -13,7 +13,6 @@ import shutil
 import time
 from datetime import datetime
 import google.generativeai as genai
-import optuna
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import mean_absolute_error, r2_score
 import torch
@@ -21,20 +20,21 @@ torch.set_num_threads(1)
 import torch.nn as nn
 import sqlite3
 import threading
+import gc
 from models.lstm_model import train_pytorch_model, StudentTransformerLSTM, get_seq_and_static_data, prepare_text_tensors
 from models.personalization_manager import apply_personalization, train_personalized_head
 from models.rag_vector_store import LocalVectorStore
 
 app = Flask(__name__, static_folder='static')
 
-# Initialize RAG Vector Store
-vector_store = LocalVectorStore()
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
 REGISTRY_PATH = os.path.join(MODELS_DIR, 'registry.json')
 CSV_PATH = os.path.join(BASE_DIR, 'student_data.csv')
 DB_PATH = os.path.join(MODELS_DIR, 'student_records.db')
+
+# Initialize RAG Vector Store with absolute path
+vector_store = LocalVectorStore(os.path.join(BASE_DIR, 'knowledge_base'))
 
 # Load .env locally if present
 env_file = os.path.join(BASE_DIR, '.env')
@@ -284,6 +284,7 @@ def validate_student_data(data, is_predict=False):
 
 
 def train_model(df):
+    global _cached_model
     registry = load_registry()
     next_ver_num = len(registry.get("history", [])) + 1
     version = f"v{next_ver_num}"
@@ -295,7 +296,7 @@ def train_model(df):
     
     entry = {
         "version": version,
-        "path": model_filepath,
+        "path": f"models/{model_filename}",
         "r2": round(float(r2_mean), 2),
         "mae": round(float(mae_mean), 2),
         "mae_std": round(float(mae_std), 2),
@@ -310,17 +311,21 @@ def train_model(df):
     if len(registry["history"]) > 5:
         for run in registry["history"][:-5]:
             old_path = run.get("path")
-            if old_path and os.path.exists(old_path) and run["version"] != registry["active_version"]:
-                try:
-                    os.remove(old_path)
-                except Exception:
-                    pass
+            if old_path:
+                full_old_path = os.path.join(BASE_DIR, old_path) if not os.path.isabs(old_path) else old_path
+                if os.path.exists(full_old_path) and run["version"] != registry["active_version"]:
+                    try:
+                        os.remove(full_old_path)
+                    except Exception:
+                        pass
                     
     save_registry(registry)
+    _cached_model = None
+    gc.collect()
     return None, mae_mean, r2_mean, FEATURE_COLS, version
 
 
-PERSONALIZATION_FILE = os.path.join("models", "personalization.json")
+PERSONALIZATION_FILE = os.path.join(MODELS_DIR, "personalization.json")
 
 def load_personalization():
     if not os.path.exists(PERSONALIZATION_FILE):
@@ -397,26 +402,72 @@ def trigger_background_training():
     t.start()
 
 
+# ── In-Memory Model Singleton Cache ─────────────────────────────────────
+_cached_model = None
+_cached_scaler_x = None
+_cached_scaler_y = None
+_cached_mae = None
+_cached_r2 = None
+_cached_ver = None
+_model_cache_lock = threading.Lock()
+
+def resolve_model_file_path(raw_path, version):
+    candidates = []
+    if raw_path:
+        candidates.append(raw_path)
+        if not os.path.isabs(raw_path):
+            candidates.append(os.path.join(BASE_DIR, raw_path))
+        filename = os.path.basename(raw_path.replace('\\', '/'))
+        candidates.append(os.path.join(MODELS_DIR, filename))
+    if version:
+        candidates.extend([
+            os.path.join(MODELS_DIR, f"model_{version}.pth"),
+            os.path.join(MODELS_DIR, f"{version}.pth"),
+            os.path.join(MODELS_DIR, f"model_{version}.pkl")
+        ])
+    for cp in candidates:
+        if cp and os.path.exists(cp):
+            return os.path.abspath(cp)
+    return None
+
 def get_model_and_stats():
-    df = load_or_create_data()
+    global _cached_model, _cached_scaler_x, _cached_scaler_y, _cached_mae, _cached_r2, _cached_ver
+    
     registry = load_registry()
     active_ver = registry.get("active_version")
     
-    if active_ver:
-        model_entry = next((item for item in registry["history"] if item["version"] == active_ver), None)
-        if model_entry and os.path.exists(model_entry["path"]):
-            try:
-                payload = joblib.load(model_entry["path"])
-                model = StudentTransformerLSTM()
-                model.load_state_dict(payload["model_state"])
-                model.eval()
-                return model, payload["scaler_x"], payload["scaler_y"], model_entry["mae"], model_entry["r2"], active_ver
-            except Exception as e:
-                print("Error loading model:", e)
-                
-    # If loading active model fails, trigger training
-    train_model(df)
-    return get_model_and_stats()
+    with _model_cache_lock:
+        if _cached_model is not None and _cached_ver == active_ver:
+            return _cached_model, _cached_scaler_x, _cached_scaler_y, _cached_mae, _cached_r2, _cached_ver
+            
+        if active_ver:
+            model_entry = next((item for item in registry.get("history", []) if item["version"] == active_ver), None)
+            raw_path = model_entry.get("path") if model_entry else None
+            resolved_path = resolve_model_file_path(raw_path, active_ver)
+            
+            if resolved_path:
+                try:
+                    payload = joblib.load(resolved_path)
+                    model = StudentTransformerLSTM()
+                    model.load_state_dict(payload["model_state"])
+                    model.eval()
+                    
+                    _cached_model = model
+                    _cached_scaler_x = payload["scaler_x"]
+                    _cached_scaler_y = payload["scaler_y"]
+                    _cached_mae = model_entry.get("mae", 0.0) if model_entry else 0.0
+                    _cached_r2 = model_entry.get("r2", 0.0) if model_entry else 0.0
+                    _cached_ver = active_ver
+                    print(f"[Model Registry] Successfully cached model {active_ver} from {resolved_path}")
+                    return _cached_model, _cached_scaler_x, _cached_scaler_y, _cached_mae, _cached_r2, _cached_ver
+                except Exception as e:
+                    print(f"Error loading model {active_ver} from {resolved_path}: {e}")
+                    
+        # If loading active model fails, trigger training
+        print(f"[Model Registry Warning] Model {active_ver} not found on disk. Falling back to training.")
+        df = load_or_create_data()
+        train_model(df)
+        return get_model_and_stats()
 
 
 global_rl_agent = None
@@ -707,14 +758,18 @@ def predict():
             median_vals = X_all.median()
             base_pred = float(shap_predict_fn(median_vals.values.reshape(1, -1))[0])
             base_value = round(base_pred, 2)
+            
+            # Vectorize all 22 feature perturbations into a single batched pass for speed & memory efficiency
+            perturbed_matrix = np.tile(median_vals.values, (len(FEATURE_COLS), 1))
+            for idx, col in enumerate(FEATURE_COLS):
+                perturbed_matrix[idx, idx] = student_df[col].values[0]
+                
+            col_preds = shap_predict_fn(perturbed_matrix)
             explanations = []
-            for col in FEATURE_COLS:
-                perturbed = median_vals.copy()
-                perturbed[col] = student_df[col].values[0]
-                col_pred = float(shap_predict_fn(perturbed.values.reshape(1, -1))[0])
+            for col, col_pred in zip(FEATURE_COLS, col_preds):
                 explanations.append({
                     "feature": col,
-                    "impact": round(col_pred - base_pred, 2)
+                    "impact": round(float(col_pred) - base_pred, 2)
                 })
 
         # Determine grade
@@ -1377,6 +1432,9 @@ def rollback_model():
             
         registry["active_version"] = target_version
         save_registry(registry)
+        
+        global _cached_model
+        _cached_model = None
         
         return jsonify({
             "success": True, 
