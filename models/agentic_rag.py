@@ -1,4 +1,5 @@
 import os
+import re
 import sqlite3
 import numpy as np
 import pandas as pd
@@ -6,21 +7,16 @@ import pandas as pd
 REACT_SYSTEM_PROMPT = """You are EduPredict Advisor, an autonomous academic agent. Your task is to analyze a student's profile and generate a highly personalized study advisory report.
 You must include a detailed 'Custom 4-Week Action Planner & Study Instructions' section, providing week-wise daily tasks, methods (e.g. active recall, spaced repetition, Feynman technique), specific chapter references, and targeted study/sleep hour adjustments to help the student improve their grades.
 
-You have access to the following tools:
-
+Available Tools:
 1. search_learning_materials(query: str) -> str: Searches syllabus and textbook chunks.
-2. query_cohort_db(sql_query: str) -> str: Queries cohort database statistics. E.g. 'SELECT AVG(sleep_hours_w1) FROM student_data'.
-3. cohort_comparator(feature_name: str, value: float) -> str: Compares the student's metrics to the cohort average.
+2. query_cohort_db(sql_query: str) -> str: Queries cohort database statistics. Table: student_data. Columns: attendance, previous_marks, final_score, study_hours_w1..w4, sleep_hours_w1..w4, lms_logins_w1..w4, assignments_completed_w1..w4, mock_exams_w1..w4.
+3. cohort_comparator(feature_name: str, value: float) -> str: Compares the student's metrics to the cohort average. Feature name can be 'study_hours', 'sleep_hours', 'attendance', 'assignments_completed', 'mock_exams'.
 
-To use a tool, output in this exact format:
-Thought: Describe why you need to call the tool.
+Usage Guidelines:
+- To call a tool, format as:
+Thought: Describe why you need the tool.
 Action: tool_name(arguments)
-
-For example:
-Thought: I need to check how the student's sleep compares to the cohort average.
-Action: cohort_comparator("sleep_hours", 5.0)
-
-When you receive the Observation, continue the thought cycle. When you have gathered enough information, double-check all recommendations against cohort stats to self-correct. Then output your final report in this format:
+- Call AT MOST 1 or 2 tools total. After receiving your observation, immediately conclude with your comprehensive final student report in markdown:
 Final Answer: [Your complete markdown report]
 """
 
@@ -46,8 +42,15 @@ def query_cohort_db(sql_query):
     if not sql_query.strip().lower().startswith("select"):
         return "Error: Only SELECT statements are permitted."
     try:
+        # Normalize generic column names to weekly columns if needed
+        normalized_query = sql_query
+        for base in ["study_hours", "sleep_hours", "lms_logins", "assignments_completed", "mock_exams"]:
+            pattern = re.compile(rf"\b{base}\b", re.IGNORECASE)
+            avg_expr = f"(({base}_w1 + {base}_w2 + {base}_w3 + {base}_w4)/4.0)"
+            normalized_query = pattern.sub(avg_expr, normalized_query)
+            
         conn = sqlite3.connect(DB_PATH)
-        df = pd.read_sql_query(sql_query, conn)
+        df = pd.read_sql_query(normalized_query, conn)
         conn.close()
         return df.to_string(index=False)
     except Exception as e:
@@ -185,7 +188,7 @@ def run_react_agent(student_profile, api_key=None):
                 
             logs.append(f"Thought: Analyzing student profile and deciding next steps.")
             
-            for step in range(5):
+            for step in range(2):
                 if "Action:" in response_text:
                     try:
                         action_line = [l for l in response_text.split("\n") if "Action:" in l][0]
@@ -211,8 +214,11 @@ def run_react_agent(student_profile, api_key=None):
                     except Exception as ex:
                         obs = f"Execution Error: {str(ex)}"
                         
-                    obs_msg = f"Observation: {obs}"
-                    logs.append(obs_msg)
+                    obs_msg = (
+                        f"Observation: {obs}\n\n"
+                        f"You have sufficient observations. Conclude now with your complete personalized student report: Final Answer: [Your complete markdown report]"
+                    )
+                    logs.append(f"Observation: {obs}")
                     
                     response_text = chat.send_message(obs_msg).text
                 elif "Final Answer:" in response_text:
@@ -223,7 +229,22 @@ def run_react_agent(student_profile, api_key=None):
             if "Final Answer:" in response_text:
                 final_report = response_text.split("Final Answer:")[1].strip()
             else:
-                final_report = response_text
+                # If Final Answer is missing or response_text is still an Action/Thought
+                try:
+                    prompt_synth = "Synthesize all information now and generate the full 4-week study plan: Final Answer: [Your complete markdown report]"
+                    synth_resp = chat.send_message(prompt_synth).text
+                    if "Final Answer:" in synth_resp:
+                        final_report = synth_resp.split("Final Answer:")[1].strip()
+                    elif len(synth_resp.strip()) > 300 and "Action:" not in synth_resp:
+                        final_report = synth_resp.strip()
+                    else:
+                        final_report, _ = run_react_agent(student_profile, api_key=None)
+                except Exception:
+                    final_report, _ = run_react_agent(student_profile, api_key=None)
+
+            # Strict safeguard: Never show raw Thought/Action deliberation in the final report
+            if not final_report or "Action:" in final_report or final_report.strip().startswith("Thought:") or len(final_report.strip()) < 200:
+                final_report, _ = run_react_agent(student_profile, api_key=None)
                 
             return final_report, logs
         except Exception as api_err:

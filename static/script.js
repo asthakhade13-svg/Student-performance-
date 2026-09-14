@@ -1128,6 +1128,9 @@ function parseMarkdown(md) {
     html = html.replace(/(?:###?\s*(?:🎯\s*)?Multi-Agent\s+RL\s+Cooperative[\s\S]*)$/i, '');
   }
 
+  // Strip any internal agent deliberations from student report view
+  html = html.replace(/^(?:Thought|Action|Observation):\s*.*$/gim, '').trim();
+
   // Basic escaping for security
   html = html
     .replace(/&/g, "&amp;")
