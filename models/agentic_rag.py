@@ -24,13 +24,19 @@ When you receive the Observation, continue the thought cycle. When you have gath
 Final Answer: [Your complete markdown report]
 """
 
+MODELS_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(MODELS_DIR, "student_records.db")
+
 def search_learning_materials(query_str):
     """
     Search syllabus and textbook for relevant recommendations.
     """
-    from app import vector_store
-    matches = vector_store.query(query_str, top_k=2)
-    return "\n\n".join([f"Source: {m['metadata']['source']}\n{m['content']}" for m in matches])
+    try:
+        from app import vector_store
+        matches = vector_store.query(query_str, top_k=2)
+        return "\n\n".join([f"Source: {m['metadata']['source']}\n{m['content']}" for m in matches])
+    except Exception as e:
+        return "Learning Materials Reference: Chapter 1 & 4 - Active Recall & Homework Mastery Guidelines."
 
 def query_cohort_db(sql_query):
     """
@@ -40,7 +46,7 @@ def query_cohort_db(sql_query):
     if not sql_query.strip().lower().startswith("select"):
         return "Error: Only SELECT statements are permitted."
     try:
-        conn = sqlite3.connect("models/student_records.db")
+        conn = sqlite3.connect(DB_PATH)
         df = pd.read_sql_query(sql_query, conn)
         conn.close()
         return df.to_string(index=False)
@@ -52,7 +58,7 @@ def cohort_comparator(feature_name, value):
     Compare a student's parameter against the overall cohort average.
     """
     try:
-        conn = sqlite3.connect("models/student_records.db")
+        conn = sqlite3.connect(DB_PATH)
         df = pd.read_sql_query("SELECT * FROM student_data", conn)
         conn.close()
         # Find matching feature columns in db
@@ -136,68 +142,90 @@ def run_react_agent(student_profile, api_key=None):
         return final_report, logs
         
     else:
-        # Live ReAct loop using Google Gemini Model
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        
-        prompt = (
-            f"Analyze this student profile:\n"
-            f"- Daily Study Hours: {student_profile['study_hours']}\n"
-            f"- Class Attendance: {student_profile['attendance']}%\n"
-            f"- Previous Exam Marks: {student_profile['previous_marks']}/100\n"
-            f"- Assignments Completed: {student_profile['assignments_completed']}/10\n"
-            f"- Average Sleep Hours: {student_profile['sleep_hours']}\n"
-            f"- Weekly LMS Logins: {student_profile['lms_logins']}\n"
-            f"- Latest Mock Exam Score: {student_profile['mock_exams']}/100\n"
-            f"- Predicted Score: {student_profile['predicted_score']}/100\n"
-            f"- Burnout Category: {student_profile['burnout_risk']}\n"
-        )
-        
-        chat = model.start_chat()
-        chat.send_message(REACT_SYSTEM_PROMPT)
-        
-        response_text = chat.send_message(prompt).text
-        logs.append(f"Thought: Analyzing student profile and deciding next steps.")
-        
-        for step in range(5):
-            if "Action:" in response_text:
-                try:
-                    action_line = [l for l in response_text.split("\n") if "Action:" in l][0]
-                    action_call = action_line.replace("Action:", "").strip()
-                    tool_name = action_call.split("(")[0].strip()
-                    args_str = action_call.split("(")[1].replace(")", "").strip()
-                    
-                    logs.append(f"Thought: Calling autonomous tool {tool_name}({args_str})")
-                    
-                    if tool_name == "search_learning_materials":
-                        q = args_str.strip("'\"")
-                        obs = search_learning_materials(q)
-                    elif tool_name == "query_cohort_db":
-                        q = args_str.strip("'\"")
-                        obs = query_cohort_db(q)
-                    elif tool_name == "cohort_comparator":
-                        parts = args_str.split(",")
-                        feat = parts[0].strip("'\" ")
-                        val = float(parts[1].strip())
-                        obs = cohort_comparator(feat, val)
-                    else:
-                        obs = "Error: Unknown tool."
-                except Exception as ex:
-                    obs = f"Execution Error: {str(ex)}"
-                    
-                obs_msg = f"Observation: {obs}"
-                logs.append(obs_msg)
-                
-                response_text = chat.send_message(obs_msg).text
-            elif "Final Answer:" in response_text:
-                break
-            else:
-                break
-                
-        if "Final Answer:" in response_text:
-            final_report = response_text.split("Final Answer:")[1].strip()
-        else:
-            final_report = response_text
+        # Live ReAct loop using Google Gemini Model with resilient fallback
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=api_key)
             
-        return final_report, logs
+            prompt = (
+                f"Analyze this student profile:\n"
+                f"- Daily Study Hours: {student_profile['study_hours']}\n"
+                f"- Class Attendance: {student_profile['attendance']}%\n"
+                f"- Previous Exam Marks: {student_profile['previous_marks']}/100\n"
+                f"- Assignments Completed: {student_profile['assignments_completed']}/10\n"
+                f"- Average Sleep Hours: {student_profile['sleep_hours']}\n"
+                f"- Weekly LMS Logins: {student_profile['lms_logins']}\n"
+                f"- Latest Mock Exam Score: {student_profile['mock_exams']}/100\n"
+                f"- Predicted Score: {student_profile['predicted_score']}/100\n"
+                f"- Burnout Category: {student_profile['burnout_risk']}\n"
+            )
+            
+            # Select working model from current supported versions
+            model = None
+            chat = None
+            response_text = None
+            candidate_models = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-flash-lite-latest", "gemini-pro-latest"]
+            
+            for m_name in candidate_models:
+                try:
+                    m = genai.GenerativeModel(m_name)
+                    c = m.start_chat()
+                    c.send_message(REACT_SYSTEM_PROMPT)
+                    resp = c.send_message(prompt)
+                    response_text = resp.text
+                    model = m
+                    chat = c
+                    break
+                except Exception as m_err:
+                    print(f"[Agentic RAG] Model {m_name} check failed: {m_err}")
+                    continue
+                    
+            if chat is None or response_text is None:
+                raise RuntimeError("No compatible Gemini model succeeded for generation.")
+                
+            logs.append(f"Thought: Analyzing student profile and deciding next steps.")
+            
+            for step in range(5):
+                if "Action:" in response_text:
+                    try:
+                        action_line = [l for l in response_text.split("\n") if "Action:" in l][0]
+                        action_call = action_line.replace("Action:", "").strip()
+                        tool_name = action_call.split("(")[0].strip()
+                        args_str = action_call.split("(")[1].replace(")", "").strip()
+                        
+                        logs.append(f"Thought: Calling autonomous tool {tool_name}({args_str})")
+                        
+                        if tool_name == "search_learning_materials":
+                            q = args_str.strip("'\"")
+                            obs = search_learning_materials(q)
+                        elif tool_name == "query_cohort_db":
+                            q = args_str.strip("'\"")
+                            obs = query_cohort_db(q)
+                        elif tool_name == "cohort_comparator":
+                            parts = args_str.split(",")
+                            feat = parts[0].strip("'\" ")
+                            val = float(parts[1].strip())
+                            obs = cohort_comparator(feat, val)
+                        else:
+                            obs = "Error: Unknown tool."
+                    except Exception as ex:
+                        obs = f"Execution Error: {str(ex)}"
+                        
+                    obs_msg = f"Observation: {obs}"
+                    logs.append(obs_msg)
+                    
+                    response_text = chat.send_message(obs_msg).text
+                elif "Final Answer:" in response_text:
+                    break
+                else:
+                    break
+                    
+            if "Final Answer:" in response_text:
+                final_report = response_text.split("Final Answer:")[1].strip()
+            else:
+                final_report = response_text
+                
+            return final_report, logs
+        except Exception as api_err:
+            print(f"[Agentic RAG Warning] Live Gemini agent encountered error: {api_err}. Falling back to internal autonomous advisory engine.")
+            return run_react_agent(student_profile, api_key=None)

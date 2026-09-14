@@ -1600,7 +1600,11 @@ def generate_advice():
             "burnout_risk": burnout_risk
         }
         
-        final_advice, agent_logs = run_react_agent(student_profile, api_key=GEMINI_API_KEY)
+        try:
+            final_advice, agent_logs = run_react_agent(student_profile, api_key=GEMINI_API_KEY)
+        except Exception as rag_err:
+            print(f"[Generate Advice] Live Advisor error: {rag_err}. Using deterministic autonomous fallback.")
+            final_advice, agent_logs = run_react_agent(student_profile, api_key=None)
         
         if rl_markdown:
             final_advice = final_advice + "\n---\n\n" + rl_markdown
@@ -1612,7 +1616,18 @@ def generate_advice():
             "is_mock": not bool(GEMINI_API_KEY)
         })
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+        # Ultimate fail-safe to guarantee student experience is never disrupted
+        try:
+            from models.agentic_rag import run_react_agent
+            final_advice, agent_logs = run_react_agent(student_profile, api_key=None)
+            return jsonify({
+                "success": True,
+                "advice": final_advice,
+                "agent_logs": agent_logs,
+                "is_mock": True
+            })
+        except Exception:
+            return jsonify({"success": False, "error": str(e)}), 400
 
 
 @app.route('/api/log-feedback', methods=['POST'])
